@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01 · Tasks and Task States — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part I · Lesson 01 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Tasks and task states</h1>
+<p class="lead">The task is the unit of work an RTOS schedules. Before you can synchronise tasks you need a precise picture of what a task is and which states it moves through.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Define a real-time system and distinguish hard, firm and soft deadlines.</li>
+    <li>Define a task and list what the kernel stores for each one.</li>
+    <li>Name the task states (Running, Ready, Blocked, Suspended, Terminated) and the event that causes each transition.</li>
+    <li>Explain why a well-designed task spends most of its life Blocked.</li>
+    <li>Describe the role of the idle task.</li>
+  </ul>
+</div>
+
+<h2>What "real-time" means</h2>
+<div class="box definition">
+  <p><span class="term">Real-time system:</span> a system whose correctness depends not only on the logical result of a computation but also on the time at which the result is produced.</p>
+</div>
+<p>Real-time does not mean fast. It means <em>predictable</em>: the worst-case response time must be known and must fit inside the deadline. Deadlines come in three strengths:</p>
+<table>
+  <thead><tr><th>Class</th><th>Consequence of a missed deadline</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Hard</td><td>System failure; the late result is worthless and may cause damage.</td><td>Airbag trigger, motor commutation, brake-by-wire</td></tr>
+    <tr><td>Firm</td><td>The late result is worthless, but occasional misses are tolerable.</td><td>A video frame decoded after its display slot</td></tr>
+    <tr><td>Soft</td><td>The result is still useful but its value degrades with lateness.</td><td>UI refresh, logging, network telemetry</td></tr>
+  </tbody>
+</table>
+<p>A real-time operating system (RTOS) is a kernel that lets you split firmware into concurrent tasks while keeping their timing analysable. It provides tasks, a priority-based scheduler, time services (delays and timeouts), and the synchronisation and communication objects covered in Part II.</p>
+
+<h2>What a task is</h2>
+<div class="box definition">
+  <p><span class="term">Task</span> (called a <em>thread</em> in Zephyr and POSIX): an independent flow of execution with its own stack, its own saved register context, a priority and a state, managed by the kernel scheduler.</p>
+</div>
+<p>On a microcontroller all tasks share one address space: any task can read or write any global variable. That is what makes tasks cheap compared with processes on a desktop OS, and it is also why Part II and Part III of this course exist.</p>
+<p>A task usually has this shape: initialise once, then loop forever, and inside the loop <em>block</em> until there is work to do.</p>
+<pre><code>task_entry():
+    initialise what this task owns
+    loop forever:
+        wait for work            ← blocks: semaphore, queue, event, or delay
+        do the work
+        publish the result       ← give, send, set bits</code></pre>
+<p>For every task the kernel keeps a <strong>task control block</strong> (TCB). Typical contents:</p>
+<ul>
+  <li>the saved stack pointer (everything else about the CPU context lives on the task's own stack, see <a href="03_context_switching.html">Lesson 03</a>);</li>
+  <li>the base priority and, when priority inheritance is active, the current effective priority;</li>
+  <li>the state, and if Blocked, which object it waits on and when its timeout expires;</li>
+  <li>the stack base and size, a name, and list links that place it in the ready queue or a wait queue.</li>
+</ul>
+
+<h3>Tasks versus interrupt service routines</h3>
+<p>An interrupt service routine (ISR) is not a task. It is invoked by hardware, runs to completion on the interrupt stack, has no TCB, and <strong>cannot block</strong>: there is no context for the scheduler to suspend. Any ISR outranks every task, whatever the task priorities. <a href="04_interrupts_and_deferred_processing.html">Lesson 04</a> covers how ISRs and tasks cooperate.</p>
+
+<h2>Task states</h2>
+<figure>
+  <img src="images/task_states.svg" alt="State diagram: Ready, Running, Blocked, Suspended and Terminated with labelled transitions" width="760">
+  <figcaption>Figure 1 · Task state machine. The names vary between kernels; the structure does not.</figcaption>
+</figure>
+<table>
+  <thead><tr><th>State</th><th>Meaning</th><th>Leaves the state when</th></tr></thead>
+  <tbody>
+    <tr><td><b>Running</b></td><td>Executing on the CPU. Exactly one task per core.</td><td>It blocks, yields, is preempted by a higher-priority task, its time slice expires, or it terminates.</td></tr>
+    <tr><td><b>Ready</b></td><td>Able to run, waiting for the CPU.</td><td>The scheduler selects it (it is the highest-priority ready task).</td></tr>
+    <tr><td><b>Blocked</b> (pending, waiting)</td><td>Waiting for an event: a semaphore, mutex, queue message, event bits, or the end of a delay. Uses no CPU time.</td><td>The event occurs, or the wait's timeout expires. It then becomes Ready, not Running.</td></tr>
+    <tr><td><b>Suspended</b></td><td>Removed from scheduling by an explicit call. Not waiting for any event.</td><td>Another context explicitly resumes it.</td></tr>
+    <tr><td><b>Terminated</b> (dead)</td><td>Its entry function returned or it was aborted.</td><td>Never (its resources may be reused).</td></tr>
+  </tbody>
+</table>
+<p>Two transitions matter most for everything that follows:</p>
+<ul>
+  <li><strong>Running → Blocked</strong> happens only by the task's own action: it calls a kernel function that has to wait. A task cannot be forced into Blocked by another task.</li>
+  <li><strong>Blocked → Ready</strong> is caused by someone else: another task or an ISR gives the semaphore, sends the message or sets the bits; or the kernel's tick handler notices that the timeout expired.</li>
+</ul>
+
+<h3>Why tasks should spend most of their time Blocked</h3>
+<p>A priority-based scheduler always runs the highest-priority Ready task. If a high-priority task polls a flag in a loop instead of blocking, it stays Ready forever and every lower-priority task starves. Blocking is how a task tells the scheduler "I have nothing to do; give the CPU to someone else". In a healthy design, the CPU load comes from bursts of work, and between bursts all tasks are Blocked.</p>
+
+<h3>The idle task</h3>
+<p>When every task is Blocked or Suspended, the kernel runs the <strong>idle task</strong>, which has the lowest possible priority and is always Ready. It typically executes a wait-for-interrupt instruction (<code>WFI</code> on Arm) to save power, or enters a deeper low-power mode. The percentage of time spent in the idle task is the simplest measure of spare CPU capacity.</p>
+
+<h2>Worked example: a thermostat</h2>
+<div class="box example">
+  <span class="box-title">Three tasks, one CPU</span>
+  <p>A thermostat has three tasks:</p>
+  <ul>
+    <li><b>Sensor</b> (high priority): every 100 ms, reads the temperature sensor, sends the value to Control.</li>
+    <li><b>Control</b> (medium): waits for a new value, runs the control law, sets the heater output.</li>
+    <li><b>Display</b> (low): every 500 ms, redraws the screen.</li>
+  </ul>
+  <p>At t = 0 ms all three are Blocked: Sensor in a 100 ms delay, Control waiting on its input queue, Display in a 500 ms delay. The idle task runs.</p>
+  <p>At t = 100 ms the delay of Sensor expires: Sensor goes Blocked → Ready → Running (it is the highest-priority Ready task). It reads the sensor (0.2 ms), sends the reading and delays again: Running → Blocked. Sending made Control Ready. Control runs for 0.5 ms and goes back to waiting on its queue: Running → Blocked. Idle runs again.</p>
+  <p>At t = 500 ms Sensor and Display become Ready at the same tick. Sensor runs first because of its priority; Display stays Ready until Sensor and then Control have blocked.</p>
+  <p>Total CPU load: roughly 0.7 ms per 100 ms plus the display redraw time per 500 ms. The rest of the time the CPU idles.</p>
+</div>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Busy-waiting.</b> <code>while (!flag) { }</code> in a task keeps it Ready and starves every lower-priority task. Block on a kernel object instead.</li>
+    <li><b>Using a delay as synchronisation.</b> "Sleep 10 ms, by then the data is there" works on the bench and fails under load. Wait for the event itself.</li>
+    <li><b>One task per function.</b> Each task costs a stack and a TCB, and every pair of tasks that shares data needs synchronisation. Create a task for each independent timing requirement or blocking point, not for each feature.</li>
+    <li><b>Accidentally returning from the entry function.</b> In some kernels this is a fault; in others the task silently terminates. If a task is meant to run forever, make the loop explicit.</li>
+    <li><b>Treating an ISR as a task.</b> ISRs cannot block, so they cannot call any API that may wait.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr on the STM32F769I-DISCO</span>
+  <ul>
+    <li>Tasks are <b>threads</b>: <code>k_thread_create()</code> at run time, or <code>K_THREAD_DEFINE()</code> for a thread created at boot. The stack comes from <code>K_THREAD_STACK_DEFINE()</code>. <code>main()</code> itself runs in a thread called <code>main</code>.</li>
+    <li>Zephyr's states are Running, Ready, Pending (waiting on an object), Sleeping (<code>k_sleep()</code>, <code>k_msleep()</code>), Suspended (<code>k_thread_suspend()</code> / <code>k_thread_resume()</code>) and Dead (returned, or <code>k_thread_abort()</code>).</li>
+    <li>Priorities are integers where a <b>lower number means higher priority</b>. Negative priorities are cooperative, zero and above are preemptible (Lesson 02).</li>
+    <li>The board's STM32F769NI has a single Cortex-M7 core, so exactly one thread is Running at any instant. The idle thread executes <code>WFI</code> when nothing is ready.</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="index.html" rel="prev">← Course home</a>
+  <a href="02_scheduling.html" rel="next">Next: Scheduling →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 400" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" font-size="13">
+  <title>Priority inversion with and without priority inheritance</title>
+  <defs>
+    <pattern id="cs" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="none"/><line x1="0" y1="0" x2="0" y2="6" stroke="#ffffff" stroke-width="2.2" opacity="0.8"/>
+    </pattern>
+  </defs>
+  <rect width="860" height="400" fill="#ffffff"/>
+  <text x="430" y="26" text-anchor="middle" font-size="17" font-weight="700" fill="#1d232b">Same task set, same mutex: without and with priority inheritance</text>
+
+  <!-- ===== Panel 1: no protocol ===== -->
+  <text x="14" y="56" font-weight="700" fill="#c4314b">Plain mutex (no protocol)</text>
+  <g font-weight="700" fill="#1d232b"><text x="96" y="87">H</text><text x="96" y="119">M</text><text x="96" y="151">L</text></g>
+  <g stroke="#e3e7ec"><line x1="120" y1="98" x2="768" y2="98"/><line x1="120" y1="130" x2="768" y2="130"/><line x1="120" y1="162" x2="768" y2="162"/></g>
+  <!-- L -->
+  <rect x="120" y="138" width="36" height="22" fill="#00798c"/>
+  <rect x="156" y="138" width="36" height="22" fill="#00798c"/><rect x="156" y="138" width="36" height="22" fill="url(#cs)"/>
+  <rect x="444" y="138" width="108" height="22" fill="#00798c"/><rect x="444" y="138" width="108" height="22" fill="url(#cs)"/>
+  <rect x="660" y="138" width="36" height="22" fill="#00798c"/>
+  <!-- H -->
+  <rect x="192" y="74" width="36" height="22" fill="#d1495b"/>
+  <rect x="229" y="79" width="322" height="12" fill="#fde8ec" stroke="#c4314b" stroke-width="1.5"/>
+  <text x="390" y="89" text-anchor="middle" font-size="11" fill="#c4314b">H blocked on the mutex for 9 ticks</text>
+  <rect x="552" y="74" width="72" height="22" fill="#d1495b"/><rect x="552" y="74" width="72" height="22" fill="url(#cs)"/>
+  <rect x="624" y="74" width="36" height="22" fill="#d1495b"/>
+  <rect x="659" y="70" width="2" height="30" fill="#1d232b"/>
+  <!-- M -->
+  <rect x="228" y="106" width="216" height="22" fill="#edae49"/>
+  <text x="336" y="121" text-anchor="middle" font-size="11.5" fill="#1d232b">M runs: it never touches the mutex</text>
+  <!-- axis -->
+  <g font-size="11" fill="#5b6573" text-anchor="middle">
+    <text x="120" y="180">0</text><text x="192" y="180">2</text><text x="264" y="180">4</text><text x="336" y="180">6</text><text x="408" y="180">8</text>
+    <text x="480" y="180">10</text><text x="552" y="180">12</text><text x="624" y="180">14</text><text x="696" y="180">16</text><text x="768" y="180">18</text>
+  </g>
+  <g font-size="11.5" fill="#1d232b">
+    <text x="780" y="80">H done t=15</text><text x="780" y="95" fill="#c4314b" font-weight="700">response 13</text>
+  </g>
+
+  <!-- ===== Panel 2: inheritance ===== -->
+  <text x="14" y="216" font-weight="700" fill="#1a7f37">Mutex with priority inheritance</text>
+  <g font-weight="700" fill="#1d232b"><text x="96" y="247">H</text><text x="96" y="279">M</text><text x="96" y="311">L</text></g>
+  <g stroke="#e3e7ec"><line x1="120" y1="258" x2="768" y2="258"/><line x1="120" y1="290" x2="768" y2="290"/><line x1="120" y1="322" x2="768" y2="322"/></g>
+  <!-- L -->
+  <rect x="120" y="298" width="36" height="22" fill="#00798c"/>
+  <rect x="156" y="298" width="36" height="22" fill="#00798c"/><rect x="156" y="298" width="36" height="22" fill="url(#cs)"/>
+  <rect x="228" y="298" width="108" height="22" fill="#00798c"/><rect x="228" y="298" width="108" height="22" fill="url(#cs)"/>
+  <rect x="228" y="292" width="108" height="6" fill="#d1495b"/>
+  <text x="282" y="335" text-anchor="middle" font-size="11" fill="#c4314b">L runs at H's priority</text>
+  <rect x="660" y="298" width="36" height="22" fill="#00798c"/>
+  <!-- H -->
+  <rect x="192" y="234" width="36" height="22" fill="#d1495b"/>
+  <rect x="229" y="239" width="106" height="12" fill="#fde8ec" stroke="#c4314b" stroke-width="1.5"/>
+  <rect x="336" y="234" width="72" height="22" fill="#d1495b"/><rect x="336" y="234" width="72" height="22" fill="url(#cs)"/>
+  <rect x="408" y="234" width="36" height="22" fill="#d1495b"/>
+  <rect x="443" y="230" width="2" height="30" fill="#1d232b"/>
+  <!-- M -->
+  <rect x="228" y="275" width="216" height="8" fill="#edae49" opacity="0.35"/>
+  <rect x="444" y="266" width="216" height="22" fill="#edae49"/>
+  <text x="336" y="272" text-anchor="middle" font-size="10.5" fill="#5b6573">M ready, cannot preempt L</text>
+  <g font-size="11" fill="#5b6573" text-anchor="middle">
+    <text x="120" y="352">0</text><text x="192" y="352">2</text><text x="264" y="352">4</text><text x="336" y="352">6</text><text x="408" y="352">8</text>
+    <text x="480" y="352">10</text><text x="552" y="352">12</text><text x="624" y="352">14</text><text x="696" y="352">16</text><text x="768" y="352">18</text>
+  </g>
+  <g font-size="11.5" fill="#1d232b">
+    <text x="780" y="240">H done t=9</text><text x="780" y="255" fill="#1a7f37" font-weight="700">response 7</text>
+  </g>
+
+  <!-- legend -->
+  <g font-size="11.5" fill="#1d232b">
+    <rect x="120" y="372" width="14" height="14" fill="#30343f"/><rect x="120" y="372" width="14" height="14" fill="url(#cs)"/>
+    <text x="140" y="383">inside the critical section (mutex held)</text>
+    <rect x="390" y="375" width="14" height="8" fill="#fde8ec" stroke="#c4314b"/>
+    <text x="410" y="383">blocked on the mutex</text>
+    <rect x="560" y="376" width="14" height="5" fill="#d1495b"/>
+    <text x="580" y="383">running at inherited priority</text>
+  </g>
+</svg>

@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 380" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" font-size="13">
+  <title>Semaphore compared with mutex</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#30343f"/>
+    </marker>
+  </defs>
+  <rect width="860" height="380" fill="#ffffff"/>
+  <text x="430" y="28" text-anchor="middle" font-size="17" font-weight="700" fill="#1d232b">Semaphore: a counter of events or units · Mutex: a lock with an owner</text>
+
+  <!-- semaphore panel -->
+  <rect x="16" y="46" width="404" height="318" rx="12" fill="#f7f8fa" stroke="#d9dee5"/>
+  <text x="218" y="72" text-anchor="middle" font-weight="700" font-size="15" fill="#1d232b">Counting semaphore (limit 4)</text>
+  <rect x="128" y="126" width="180" height="70" rx="10" fill="#ffffff" stroke="#1a7f37" stroke-width="2"/>
+  <circle cx="163" cy="161" r="14" fill="#1a7f37"/><circle cx="198" cy="161" r="14" fill="#1a7f37"/>
+  <circle cx="233" cy="161" r="14" fill="none" stroke="#9aa4b1" stroke-dasharray="3 3"/><circle cx="268" cy="161" r="14" fill="none" stroke="#9aa4b1" stroke-dasharray="3 3"/>
+  <text x="218" y="215" text-anchor="middle" fill="#1d232b">count = 2</text>
+
+  <rect x="30" y="92" width="92" height="34" rx="6" fill="#ffffff" stroke="#30343f"/><text x="76" y="114" text-anchor="middle">Task X</text>
+  <rect x="30" y="200" width="92" height="34" rx="6" fill="#ffffff" stroke="#30343f"/><text x="76" y="222" text-anchor="middle">ISR</text>
+  <rect x="316" y="92" width="92" height="34" rx="6" fill="#ffffff" stroke="#30343f"/><text x="362" y="114" text-anchor="middle">Task Y</text>
+  <rect x="316" y="200" width="92" height="34" rx="6" fill="#ffffff" stroke="#30343f"/><text x="362" y="222" text-anchor="middle">Task Z</text>
+  <path d="M122,109 L140,124" stroke="#30343f" stroke-width="2" marker-end="url(#a)"/>
+  <path d="M122,215 L140,196" stroke="#30343f" stroke-width="2" marker-end="url(#a)"/>
+  <path d="M296,124 L316,109" stroke="#30343f" stroke-width="2" marker-end="url(#a)"/>
+  <path d="M296,196 L316,215" stroke="#30343f" stroke-width="2" marker-end="url(#a)"/>
+  <text x="76" y="146" text-anchor="middle" font-size="12" fill="#1a7f37">give (+1)</text>
+  <text x="76" y="254" text-anchor="middle" font-size="12" fill="#1a7f37">give (+1)</text>
+  <text x="362" y="146" text-anchor="middle" font-size="12" fill="#c4314b">take (−1)</text>
+  <text x="362" y="254" text-anchor="middle" font-size="12" fill="#c4314b">take (−1)</text>
+
+  <g font-size="12.5" fill="#1d232b">
+    <text x="34" y="290">• No owner: any task or ISR may give.</text>
+    <text x="34" y="310">• take blocks when count = 0; give wakes a waiter.</text>
+    <text x="34" y="330">• Binary semaphore = limit 1: "event happened".</text>
+    <text x="34" y="350">• No priority inheritance.</text>
+  </g>
+
+  <!-- mutex panel -->
+  <rect x="440" y="46" width="404" height="318" rx="12" fill="#f7f8fa" stroke="#d9dee5"/>
+  <text x="642" y="72" text-anchor="middle" font-weight="700" font-size="15" fill="#1d232b">Mutex</text>
+  <rect x="582" y="110" width="120" height="96" rx="10" fill="#ffffff" stroke="#c4314b" stroke-width="2"/>
+  <rect x="624" y="150" width="36" height="28" rx="3" fill="#30343f"/>
+  <path d="M630,150 v-10 a12,12 0 0 1 24,0 v10" fill="none" stroke="#30343f" stroke-width="4"/>
+  <text x="642" y="198" text-anchor="middle" font-size="12" fill="#1d232b">locked</text>
+  <rect x="582" y="214" width="120" height="26" rx="13" fill="#00798c"/>
+  <text x="642" y="232" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700">owner: Task L</text>
+
+  <rect x="456" y="92" width="100" height="34" rx="6" fill="#ffffff" stroke="#30343f"/><text x="506" y="114" text-anchor="middle">Task L</text>
+  <rect x="728" y="92" width="100" height="34" rx="6" fill="#fff6dd" stroke="#9a6700"/><text x="778" y="114" text-anchor="middle">Task H</text>
+  <path d="M556,112 L580,130" stroke="#30343f" stroke-width="2" marker-end="url(#a)"/>
+  <path d="M728,112 L704,130" stroke="#9a6700" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+  <text x="506" y="146" text-anchor="middle" font-size="12" fill="#1d232b">lock / unlock</text>
+  <text x="778" y="146" text-anchor="middle" font-size="12" fill="#9a6700">lock → blocks</text>
+  <text x="778" y="162" text-anchor="middle" font-size="12" fill="#9a6700">L inherits H's priority</text>
+
+  <g font-size="12.5" fill="#1d232b">
+    <text x="458" y="290">• Owner: only the task that locked may unlock.</text>
+    <text x="458" y="310">• Priority inheritance bounds priority inversion.</text>
+    <text x="458" y="330">• Often recursive: owner may lock again (count).</text>
+    <text x="458" y="350">• Thread context only, never from an ISR.</text>
+  </g>
+</svg>

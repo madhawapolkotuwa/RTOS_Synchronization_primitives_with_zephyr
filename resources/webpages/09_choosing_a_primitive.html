@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>09 · Choosing a Primitive — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part II · Lesson 09 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Choosing a primitive</h1>
+<p class="lead">Each primitive in Part II solves a different problem. This lesson puts them side by side and gives a procedure for picking the right one, so the hazards in Part III have fewer places to appear.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Classify a synchronisation need as data transfer, mutual exclusion, condition waiting, counting or one-to-one signalling.</li>
+    <li>Select the matching primitive with a short decision procedure.</li>
+    <li>Compare all primitives on ownership, ISR use, payload, waiters woken and priority inheritance.</li>
+    <li>Recognise the most common mismatches and what each one costs.</li>
+  </ul>
+</div>
+
+<h2>Start from the need, not the API</h2>
+<p>Every interaction between two contexts is one of five kinds:</p>
+<ol>
+  <li><b>Transfer</b>: data must go from A to B.</li>
+  <li><b>Exclusion</b>: A and B must not be inside the same code or touch the same resource at the same time.</li>
+  <li><b>Condition</b>: B must wait until some combination of things is true, possibly together with other tasks.</li>
+  <li><b>Counting</b>: B must handle each of N occurrences, or N units are shared.</li>
+  <li><b>Signal</b>: A must tell exactly one known task B that something happened.</li>
+</ol>
+<figure>
+  <img src="images/primitive_selection.svg" alt="Decision flow: data transfer leads to message queue, shared resource to mutex, combined conditions to event group, counting to counting semaphore, signal to one task to task notification, otherwise binary semaphore" width="860">
+  <figcaption>Figure 1 · Ask the questions in order; the first "yes" gives the primitive.</figcaption>
+</figure>
+<p>The order matters. A queue is first because, when data must move anyway, it also provides the synchronisation, and the need for a separate lock disappears. A mutex comes before signalling primitives because a semaphore used as a lock is the most common and most damaging mismatch.</p>
+
+<h2>Side-by-side comparison</h2>
+<table>
+  <thead>
+    <tr><th>Property</th><th>Binary sem.</th><th>Counting sem.</th><th>Mutex</th><th>Event group</th><th>Task notification</th><th>Message queue</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Purpose</td><td>signal an event</td><td>count events / units</td><td>exclusive access</td><td>wait on conditions, broadcast</td><td>lightweight signal to one task</td><td>transfer data</td></tr>
+    <tr><td>State</td><td>0 or 1</td><td>0 … limit</td><td>locked/unlocked + owner</td><td>word of bits</td><td>word in target TCB</td><td>0 … depth messages</td></tr>
+    <tr><td>Owner</td><td>no</td><td>no</td><td><b>yes</b></td><td>no</td><td>receiver is fixed</td><td>no</td></tr>
+    <tr><td>Priority inheritance</td><td>no</td><td>no</td><td><b>yes</b></td><td>no</td><td>no</td><td>no</td></tr>
+    <tr><td>Give/set/send from ISR</td><td>yes</td><td>yes</td><td><b>no</b></td><td>yes (some kernels defer)</td><td>yes</td><td>yes, no-wait only</td></tr>
+    <tr><td>Waiters woken per operation</td><td>one</td><td>one</td><td>one (new owner)</td><td><b>all</b> whose condition holds</td><td>the target</td><td>one</td></tr>
+    <tr><td>Remembers repetitions</td><td>no</td><td>yes</td><td>n/a</td><td>no</td><td>in increment mode</td><td>yes, with data</td></tr>
+    <tr><td>Payload</td><td>none</td><td>none</td><td>none</td><td>bits</td><td>one word</td><td>a message per slot</td></tr>
+    <tr><td>Sender can block</td><td>no</td><td>no</td><td>n/a</td><td>no</td><td>no</td><td>yes, when full</td></tr>
+  </tbody>
+</table>
+
+<h2>Worked example: a data logger</h2>
+<div class="box example">
+  <span class="box-title">Six interactions, six decisions</span>
+  <p>A data logger samples an ADC, filters the data, writes records to an SD card, shows status on a display and accepts commands over USB.</p>
+  <table>
+    <thead><tr><th>Interaction</th><th>Kind</th><th>Primitive</th></tr></thead>
+    <tbody>
+      <tr><td>ADC DMA half/full-buffer ISR → filter task: "buffer N is ready"</td><td>transfer (buffer index)</td><td>Message queue of buffer indices (depth 2)</td></tr>
+      <tr><td>Filter task → storage task: filtered records</td><td>transfer</td><td>Message queue of record pointers from a block pool (ownership transfer)</td></tr>
+      <tr><td>Storage task and USB command task both access the SD card</td><td>exclusion</td><td>Mutex, or make the storage task the SD card's gatekeeper and send it USB requests through its queue</td></tr>
+      <tr><td>Logging starts only when "card mounted" AND "clock set" AND "user pressed start"</td><td>condition</td><td>Event group, wait for all three bits</td></tr>
+      <tr><td>Display task needs the latest battery voltage</td><td>transfer of latest state</td><td>Depth-1 overwrite queue, or a mutex-protected variable</td></tr>
+      <tr><td>USB ISR → USB task: "endpoint has data"</td><td>signal to one task</td><td>Task notification (or binary semaphore)</td></tr>
+    </tbody>
+  </table>
+  <p>Note the second option for the SD card. Making one task the only user of the card removes the mutex and with it the possibility of priority inversion or deadlock on that resource.</p>
+</div>
+
+<h2>Common mismatches and their cost</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Binary semaphore as a lock</b> → no owner check, no priority inheritance: unbounded priority inversion (Lesson 11).</li>
+    <li><b>Mutex for signalling</b> ("unlock to tell the other task") → violates ownership; the kernel rejects it or behaviour is undefined.</li>
+    <li><b>Binary semaphore or event bit for events that must all be processed</b> → events are silently merged.</li>
+    <li><b>Shared global + semaphore instead of a queue</b> → the producer can overwrite the global before the consumer reads it; you have rebuilt a depth-1 queue with a race.</li>
+    <li><b>Event group for a single waiter and a single bit</b> → works, but costs more than a semaphore or notification.</li>
+    <li><b>Queue of large structures by copy</b> → CPU spent on copying, RAM doubled; pass pointers with ownership transfer.</li>
+    <li><b>Disabling interrupts for long task-only critical sections</b> → every ISR's latency grows; a mutex was the right tool.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr equivalents at a glance</span>
+  <table>
+    <thead><tr><th>Concept</th><th>Zephyr object</th><th>Key calls</th></tr></thead>
+    <tbody>
+      <tr><td>Binary / counting semaphore</td><td><code>struct k_sem</code></td><td><code>K_SEM_DEFINE</code>, <code>k_sem_take</code>, <code>k_sem_give</code></td></tr>
+      <tr><td>Mutex</td><td><code>struct k_mutex</code></td><td><code>K_MUTEX_DEFINE</code>, <code>k_mutex_lock</code>, <code>k_mutex_unlock</code></td></tr>
+      <tr><td>Event group</td><td><code>struct k_event</code> (<code>CONFIG_EVENTS</code>)</td><td><code>k_event_post</code>, <code>k_event_wait</code>, <code>k_event_wait_all</code>, <code>k_event_clear</code></td></tr>
+      <tr><td>Task notification</td><td>no direct equivalent</td><td>per-thread <code>k_sem</code>/<code>k_event</code>, <code>k_poll_signal</code></td></tr>
+      <tr><td>Message queue (copy)</td><td><code>struct k_msgq</code></td><td><code>K_MSGQ_DEFINE</code>, <code>k_msgq_put</code>, <code>k_msgq_get</code></td></tr>
+      <tr><td>Pointer passing</td><td><code>k_fifo</code> + <code>k_mem_slab</code></td><td><code>k_fifo_put</code>, <code>k_fifo_get</code>, <code>k_mem_slab_alloc</code></td></tr>
+      <tr><td>Wait on several objects</td><td><code>k_poll</code></td><td><code>k_poll</code>, <code>k_poll_event_init</code></td></tr>
+      <tr><td>ISR-shared data</td><td><code>k_spinlock</code>, <code>atomic_t</code></td><td><code>k_spin_lock</code>, <code>atomic_inc</code>, <code>atomic_cas</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<nav class="pager">
+  <a href="08_message_queues.html" rel="prev">← Message queues</a>
+  <a href="10_mutual_exclusion_and_deadlock.html" rel="next">Next: Mutual exclusion and deadlock →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+</body>
+</html>

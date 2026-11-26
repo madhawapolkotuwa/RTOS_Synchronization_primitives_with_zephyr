@@ -1,0 +1,109 @@
+# Application options for 04_event_groups.
+# Change them in prj.conf; no code edits are needed for the experiments.
+
+mainmenu "04_event_groups"
+
+choice APP_DEMO
+	prompt "Which demo to build"
+	default APP_DEMO_GATE
+
+config APP_DEMO_GATE
+	bool "Part A: wait-all start-up gate"
+
+config APP_DEMO_DISPATCH
+	bool "Part B: wait-any dispatcher"
+
+endchoice
+
+config APP_REPORT_PERIOD_MS
+	int "Period of the statistics report printed by main (ms)"
+	default 2000
+
+config APP_DEBOUNCE_MS
+	int "Ignore button edges closer than this to the last accepted one (ms, 0 = off)"
+	default 50
+	help
+	  The debounce that tutorial 02, experiment A5, recommended. It is
+	  done in the button ISR in main.c, before the demo sees the press.
+
+# --- Part A: used only when APP_DEMO_GATE is selected ---
+
+config APP_SENSOR_INIT_MS
+	int "Time until the sensor is ready (ms)"
+	default 300
+
+config APP_CONFIG_INIT_MS
+	int "Time until the configuration is loaded (ms)"
+	default 800
+
+config APP_LINK_INIT_MS
+	int "Time until the link comes up for the first time (ms)"
+	default 1500
+
+config APP_LINK_UP_TIME_MS
+	int "How long the link stays up in each cycle (ms, 0 = up for ever)"
+	default 3000
+
+config APP_LINK_DOWN_TIME_MS
+	int "How long the link stays down in each cycle (ms)"
+	default 2000
+	range 1 100000
+
+config APP_TRANSFER_MS
+	int "Duration of one transfer done by the worker (ms)"
+	default 200
+	range 1 10000
+
+config APP_GATE_TIMEOUT_MS
+	int "Timeout of the worker's wait for the gate (ms)"
+	default 1000
+	range 1 100000
+	help
+	  On timeout the worker prints which conditions are still missing
+	  and waits again.
+
+config APP_GATE_WAIT_ANY
+	bool "Experiment A2: wait for ANY condition instead of ALL (wrong)"
+
+config APP_GATE_RESET
+	bool "Experiment A3: wait with reset = true (wrong here)"
+	help
+	  The reset argument clears the tracked events BEFORE the wait. It
+	  is not a clear-on-exit, and it erases bits other threads posted.
+
+config APP_LINK_USE_SET
+	bool "Experiment A4: the link thread uses k_event_set() instead of k_event_post() (wrong)"
+	help
+	  k_event_set() replaces the whole 32-bit word, so it erases every
+	  other condition.
+
+# --- Part B: used only when APP_DEMO_DISPATCH is selected ---
+
+config APP_TICK_PERIOD_MS
+	int "Period of the timer source (ms, 0 = off)"
+	default 1000
+
+config APP_DATA_PERIOD_MS
+	int "Period of the data-producer thread (ms, 0 = off)"
+	default 300
+
+config APP_HANDLE_MS
+	int "Time the dispatcher spends handling one event (ms)"
+	default 50
+	range 1 10000
+
+config APP_CLEAR_AFTER_HANDLING
+	bool "Experiment B2: clear the bits after handling instead of before (wrong)"
+
+config APP_BUTTON_LOGGER
+	bool "Experiments B3/B4: a second thread that also waits for the button bit"
+
+config APP_LOGGER_PRIORITY
+	int "Priority of the logger thread (lower number = more urgent)"
+	default 4
+	range 0 14
+	help
+	  4 is less urgent than the dispatcher (2), which owns the clearing.
+	  1 is more urgent: see experiment B4.
+
+source "Kconfig.zephyr"

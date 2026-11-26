@@ -1,0 +1,88 @@
+# Application options for 02_counting_semaphores.
+# Change them in prj.conf; no code edits are needed for most experiments.
+
+mainmenu "02_counting_semaphores"
+
+choice APP_DEMO
+	prompt "Which demo to build"
+	default APP_DEMO_EVENTS
+
+config APP_DEMO_EVENTS
+	bool "Part A: count bursty events without losing any"
+
+config APP_DEMO_POOL
+	bool "Part B: a pool of identical buffers with back-pressure"
+
+endchoice
+
+config APP_REPORT_PERIOD_MS
+	int "Period of the statistics report printed by main (ms)"
+	default 2000
+	help
+	  main() runs at the lowest priority and prints a summary at this
+	  period. Part B uses it; Part A prints one line per event instead.
+
+# --- Part A: used only when APP_DEMO_EVENTS is selected ---
+
+config APP_EVENT_SEM_LIMIT
+	int "Limit of the counting semaphore"
+	default 10
+	range 1 1000
+	help
+	  The most events the semaphore can hold. An event given when the
+	  count is already at the limit is lost. 1 makes it a binary
+	  semaphore, as in tutorial 01.
+
+config APP_PROCESSING_MS
+	int "Time the handler thread spends on each event (ms)"
+	default 100
+
+config APP_BURST_SIZE
+	int "Events in each burst"
+	default 8
+	range 1 1000
+
+config APP_BURST_GAP_MS
+	int "Time between two events of a burst (ms)"
+	default 10
+	range 1 10000
+
+config APP_BURST_PERIOD_MS
+	int "Time from the start of one burst to the start of the next (ms, 0 = no bursts)"
+	default 3000
+	help
+	  A k_timer generates the bursts from interrupt context. Use a
+	  multiple of APP_BURST_GAP_MS that is longer than one burst.
+	  0 turns the timer off: then only the button raises events.
+
+config APP_FLUSH_THRESHOLD
+	int "Discard the backlog with k_sem_reset() when it reaches this size (0 = never)"
+	default 0
+	help
+	  A policy for when old events are worth less than new ones: if the
+	  handler finds this many events pending, it throws them all away
+	  and counts them as discarded.
+
+# --- Part B: used only when APP_DEMO_POOL is selected ---
+
+config APP_POOL_SIZE
+	int "Number of buffers in the pool"
+	default 4
+	range 1 32
+
+config APP_SENDER_PERIOD_MS
+	int "Pause of each sender thread after it has queued a message (ms)"
+	default 200
+
+config APP_TX_TIME_MS
+	int "Time one simulated transmission keeps a buffer busy (ms)"
+	default 300
+
+config APP_ALLOC_TIMEOUT_MS
+	int "How long a sender waits for a free buffer (ms, 0 = do not wait)"
+	default 1000
+	help
+	  When it expires the sender gives up on that message and counts
+	  it as failed.
+
+source "Kconfig.zephyr"

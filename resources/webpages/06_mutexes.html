@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 · Mutexes — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part II · Lesson 06 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Mutexes</h1>
+<p class="lead">A mutex is a lock built for one job: making sure only one task at a time is inside a critical section. Its ownership rule is what separates it from a binary semaphore, and it is what makes priority inheritance possible.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Define a critical section and a mutex.</li>
+    <li>Explain mutex ownership and the three properties it enables: owner-only unlock, recursive locking, and priority inheritance.</li>
+    <li>Choose between a mutex, interrupt masking, a scheduler lock and atomic operations for a given critical section.</li>
+    <li>Size a critical section correctly: protect the whole invariant, nothing more.</li>
+    <li>Explain why a mutex cannot be used from an ISR or for signalling.</li>
+  </ul>
+</div>
+
+<h2>The concept</h2>
+<div class="box definition">
+  <p><span class="term">Critical section:</span> a sequence of code that accesses a shared resource and must not be executed by more than one task at a time for the resource to stay consistent.</p>
+  <p><span class="term">Mutex</span> (mutual exclusion lock): a kernel object with two states, unlocked and locked, and an <em>owner</em>.</p>
+  <ul>
+    <li><b>lock</b>: if unlocked, it becomes locked and the caller becomes its owner. If locked by another task, the caller blocks (optionally with a timeout).</li>
+    <li><b>unlock</b>: only the owner may unlock. If tasks are waiting, ownership passes to one of them (normally the highest-priority one), which becomes Ready; otherwise the mutex becomes unlocked.</li>
+  </ul>
+</div>
+<p>Every access to the shared resource is wrapped: lock, access, unlock. Because only one task can own the mutex, only one task can be between its lock and its unlock.</p>
+
+<h3>What ownership gives you</h3>
+<ul>
+  <li><b>Owner-only unlock.</b> Another task cannot release the lock by mistake. The kernel rejects it, which turns a silent data-corruption bug into a visible error.</li>
+  <li><b>Recursive locking</b> (in kernels that support it). The owner may lock again; the kernel keeps a lock count and the mutex is released only when the count returns to zero. This lets a locked function call another function that locks the same mutex. Non-recursive mutexes deadlock or report an error in that case.</li>
+  <li><b>Priority inheritance.</b> Because the kernel knows who holds the lock, when a higher-priority task blocks on it the kernel temporarily raises the owner to that priority, so medium-priority tasks cannot delay the owner indefinitely. This is the subject of <a href="11_priority_inversion.html">Lesson 11</a>; the demo below already shows it.</li>
+</ul>
+
+<h2>Mutex handoff demo</h2>
+<div class="demo" data-demo="handoff" data-default="mutex">
+  <p class="demo-title">Interactive: ownership, recursion and priority inheritance</p>
+  <div class="demo-controls">
+    <label>Object
+      <select data-opt="mode">
+        <option value="binary">Binary semaphore</option>
+        <option value="counting">Counting semaphore</option>
+        <option value="mutex">Mutex</option>
+      </select>
+    </label>
+    <button class="primary" data-act="scenario">Play scenario</button>
+    <button data-act="isr">ISR: unlock</button>
+    <button data-act="reset">Reset</button>
+  </div>
+  <div class="hd-stage"></div>
+  <div class="status"></div>
+  <div class="log"></div>
+</div>
+<p>Play the mutex scenario, then repeat the same steps with the binary semaphore selected. With the semaphore, Medium's "give" succeeds even though Medium never took it. With the mutex, the same call is rejected. With the semaphore, Low never inherits High's priority.</p>
+
+<h2>Alternatives for mutual exclusion</h2>
+<p>A mutex is not the only way to make a section exclusive. The right choice depends on who shares the data and how long the section is.</p>
+<table>
+  <thead><tr><th>Mechanism</th><th>Excludes</th><th>Cost and limits</th><th>Use when</th></tr></thead>
+  <tbody>
+    <tr><td>Mutex</td><td>Other tasks that use the same mutex</td><td>Tasks only. Blocking possible. Priority inheritance.</td><td>Task-only sharing, sections of any length up to milliseconds</td></tr>
+    <tr><td>Interrupt masking (global or up to a priority)</td><td>ISRs and, as a result, all task switches</td><td>Adds directly to interrupt latency of the whole system</td><td>Data shared with an ISR; sections of a few instructions</td></tr>
+    <tr><td>Scheduler lock</td><td>All other tasks (ISRs still run)</td><td>Delays every task, including unrelated high-priority ones</td><td>Very short task-only sections where a mutex is too heavy</td></tr>
+    <tr><td>Atomic operations</td><td>Concurrent modification of one word</td><td>Only single-variable updates (increment, compare-and-swap, set bit)</td><td>Counters, flags, reference counts</td></tr>
+    <tr><td>Single owner (gatekeeper task)</td><td>Everyone: only one task ever touches the resource</td><td>Requests go through a queue; adds latency</td><td>Peripherals with long operations, complex drivers</td></tr>
+  </tbody>
+</table>
+
+<h2>When not to use a mutex</h2>
+<ul>
+  <li><b>In an ISR.</b> An ISR is not a task: it cannot block and cannot be an owner. To share data with an ISR, mask that interrupt briefly or use a lock-free queue.</li>
+  <li><b>For signalling.</b> "Task A unlocks to tell Task B" breaks the ownership rule. Use a semaphore, notification or event group.</li>
+  <li><b>Around long or blocking operations</b> when you can avoid it: holding a mutex while waiting for a queue, sleeping or doing slow I/O extends the time every other user waits, and is the first step towards deadlock (<a href="10_mutual_exclusion_and_deadlock.html">Lesson 10</a>).</li>
+  <li><b>For a single word</b> that an atomic operation can update.</li>
+</ul>
+
+<h2>Worked example: a shared I²C bus</h2>
+<div class="box example">
+  <span class="box-title">Two sensor tasks, one bus</span>
+  <p>A temperature task and an accelerometer task share one I²C bus. A register read is a <em>transaction</em>: START, device address + write, register address, repeated START, device address + read, N data bytes, STOP. If the accelerometer task preempts the temperature task between its register-address write and its read, the bus sequence interleaves and both reads return garbage.</p>
+  <ul>
+    <li><b>Wrong granularity:</b> lock around each byte. Transactions still interleave between bytes.</li>
+    <li><b>Wrong scope:</b> one "sensor" mutex held while the task also computes and logs its results. Everyone waits for work that does not touch the bus.</li>
+    <li><b>Right:</b> one mutex per bus, locked for exactly one complete transaction, released before any processing.</li>
+  </ul>
+  <p>The rule generalises: identify the <em>invariant</em> (here, "a transaction is never interleaved") and hold the lock for exactly the code that could break it.</p>
+</div>
+
+<h2>How it differs from the other primitives</h2>
+<table>
+  <thead><tr><th>Compared with</th><th>Difference</th></tr></thead>
+  <tbody>
+    <tr><td>Binary semaphore</td><td>Same 0/1 state, but a mutex has an owner, rejects unlock by non-owners, can be recursive, supports priority inheritance, and is thread-only. A binary semaphore is for signalling; a mutex is for locking.</td></tr>
+    <tr><td>Counting semaphore</td><td>Allows up to N tasks in; a mutex allows exactly one.</td></tr>
+    <tr><td>Event group, notification, queue</td><td>These pass a signal or data from one context to another. A mutex passes nothing; it only excludes.</td></tr>
+  </tbody>
+</table>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Missing unlock on an error path.</b> An early <code>return</code> inside the critical section leaves the mutex locked forever. Use one exit point from locked regions.</li>
+    <li><b>Check-then-act outside the lock.</b> Reading "is the buffer empty?" under the lock, releasing, then writing under a new lock: the state may change in between. Keep the check and the action in the same critical section.</li>
+    <li><b>Locking in some paths but not all.</b> A mutex protects nothing if one access skips it. Every access to the shared data must use the same mutex.</li>
+    <li><b>Locking two mutexes in different orders in different tasks.</b> Classic deadlock (Lesson 10).</li>
+    <li><b>One giant lock</b> for many unrelated resources. Unrelated tasks block each other and response times grow.</li>
+    <li><b>Assuming recursion is available or forbidden.</b> Kernels differ; check before relying on either.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr: <code>struct k_mutex</code></span>
+  <ul>
+    <li>Define with <code>K_MUTEX_DEFINE(name)</code> or <code>k_mutex_init()</code>.</li>
+    <li><code>k_mutex_lock(&amp;m, timeout)</code> returns 0, <code>-EBUSY</code> (with <code>K_NO_WAIT</code>) or <code>-EAGAIN</code> (timeout). <code>k_mutex_unlock()</code> returns <code>-EPERM</code> if the caller is not the owner and <code>-EINVAL</code> if the mutex is not locked.</li>
+    <li>Zephyr mutexes are <b>recursive</b> (lock count) and always use <b>priority inheritance</b>. <code>CONFIG_PRIORITY_CEILING</code> caps how high inheritance may raise a thread (default −127, which in practice means no cap).</li>
+    <li>Not ISR-safe. For data shared with an ISR use <code>k_spinlock</code> (<code>k_spin_lock()</code> / <code>k_spin_unlock()</code>), which on this single-core Cortex-M7 masks interrupts, or <code>irq_lock()</code> / <code>irq_unlock()</code>, or the <code>atomic_t</code> API.</li>
+    <li><code>k_sched_lock()</code> / <code>k_sched_unlock()</code> implement the scheduler-lock alternative.</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="05_semaphores.html" rel="prev">← Semaphores</a>
+  <a href="07_event_groups_and_notifications.html" rel="next">Next: Event groups and task notifications →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+<script src="js/handoff_demo.js"></script>
+</body>
+</html>

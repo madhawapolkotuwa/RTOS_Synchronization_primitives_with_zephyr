@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11 · Priority Inversion — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part III · Lesson 11 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Priority inversion</h1>
+<p class="lead">A fixed-priority scheduler promises that urgent tasks run first. Sharing a resource between priority levels can break that promise, without limit, unless the lock itself takes part in scheduling.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Define priority inversion and distinguish bounded from unbounded inversion.</li>
+    <li>Trace an unbounded inversion scenario tick by tick.</li>
+    <li>Explain the priority inheritance protocol, its guarantees and its limits.</li>
+    <li>Explain the original and the immediate priority ceiling protocols at a conceptual level and compare them with inheritance.</li>
+    <li>Reduce the risk of inversion through design, independent of the protocol.</li>
+  </ul>
+</div>
+
+<h2>The concept</h2>
+<div class="box definition">
+  <p><span class="term">Priority inversion:</span> a higher-priority task is prevented from running while a lower-priority task runs instead, because the higher-priority task is blocked on a resource held by a lower-priority task.</p>
+  <p><span class="term">Bounded inversion:</span> the blocking lasts at most as long as the lower-priority task's critical section. This is inherent to sharing a resource and is accounted for in timing analysis.</p>
+  <p><span class="term">Unbounded inversion:</span> while the low-priority owner holds the resource, medium-priority tasks that do not use the resource preempt it. The high-priority task's delay then depends on the run time of unrelated medium tasks and has no bound.</p>
+</div>
+<p>Bounded inversion is a cost; unbounded inversion is a defect. The second one is what protocols remove.</p>
+
+<h2>Worked scenario</h2>
+<div class="box example">
+  <span class="box-title">Three tasks, one mutex (times in ticks)</span>
+  <ul>
+    <li><b>L</b> (low), released at t = 0: computes 1, locks the mutex, works 4 inside, unlocks, computes 1.</li>
+    <li><b>H</b> (high), released at t = 2: computes 1, locks the mutex, works 2 inside, unlocks, computes 1.</li>
+    <li><b>M</b> (medium), released at t = 3: computes 6. Never uses the mutex.</li>
+  </ul>
+  <table>
+    <thead><tr><th>Tick</th><th>Plain mutex</th><th>With priority inheritance</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td>L runs</td><td>L runs</td></tr>
+      <tr><td>1</td><td>L locks, runs inside (1 of 4)</td><td>same</td></tr>
+      <tr><td>2</td><td>H released, preempts L, runs</td><td>same</td></tr>
+      <tr><td>3</td><td>H tries to lock: blocked. M released; M (medium) &gt; L (low): <b>M runs</b></td><td>H blocked; <b>L inherits H's priority</b>. M released but L (now high) &gt; M: <b>L runs</b></td></tr>
+      <tr><td>4–5</td><td>M runs</td><td>L finishes its critical section at end of t = 5</td></tr>
+      <tr><td>6</td><td>M runs</td><td>L unlocks, drops to low. H gets the mutex, runs</td></tr>
+      <tr><td>7–8</td><td>M runs (finishes end of t = 8)</td><td>H finishes at end of t = 8</td></tr>
+      <tr><td>9–11</td><td>L finally resumes its critical section</td><td>M runs t = 9 … 14</td></tr>
+      <tr><td>12–14</td><td>L unlocks at t = 12; H runs, finishes end of t = 14</td><td>M runs</td></tr>
+      <tr><td>Result</td><td><b>H response time 13 ticks</b>, of which 6 spent waiting for M</td><td><b>H response time 7 ticks</b>; blocking limited to L's critical section</td></tr>
+    </tbody>
+  </table>
+  <p>With the plain mutex, H's delay grows one tick for every tick of M's work, and with several medium tasks it grows further. Nothing in H's or L's code changed; the delay came from a task that never touched the resource.</p>
+</div>
+<figure>
+  <img src="images/priority_inversion.svg" alt="Two Gantt charts. Top: plain mutex, H blocked from t=3 to t=12 while M runs; H done at 15. Bottom: inheritance, L runs at H's priority until t=6, H done at 9, M runs afterwards." width="860">
+  <figcaption>Figure 1 · The same task set without and with priority inheritance.</figcaption>
+</figure>
+
+<h3>A real case: Mars Pathfinder (1997)</h3>
+<p>Days after landing, the Pathfinder lander began resetting itself. A low-priority meteorological task held a mutex protecting a shared information bus; the high-priority bus-management task blocked on it; medium-priority communication tasks preempted the low-priority holder. The high-priority task missed its deadline, a watchdog detected it, and the system reset. The mutex had a priority-inheritance option that was disabled. Engineers reproduced the fault on a ground replica and enabled inheritance on that mutex with an uploaded patch.</p>
+
+<h2>Priority inheritance protocol</h2>
+<div class="box definition">
+  <p><span class="term">Priority inheritance</span> (Sha, Rajkumar, Lehoczky, 1990): when a task blocks on a mutex, the owner of the mutex has its effective priority raised to the blocked task's priority if that is higher. When the owner releases the mutex, its priority returns to the highest of its base priority and the priorities of tasks still blocked on mutexes it continues to hold.</p>
+</div>
+<p>In full implementations inheritance is <b>transitive</b>: if the owner L is itself blocked on a second mutex held by K, K inherits too.</p>
+<p><b>Guarantees.</b> A high-priority task can be blocked only for the duration of lower-priority critical sections it actually conflicts with: at most once per lower-priority task, and at most once per mutex it may need. Medium-priority tasks can no longer extend that time.</p>
+<p><b>Limits.</b></p>
+<ul>
+  <li>It does <b>not prevent deadlock</b>. Two tasks that lock in opposite orders still deadlock.</li>
+  <li><b>Chained blocking</b>: a task needing several mutexes may be blocked once on each of them, by different lower-priority tasks. The bound exists but can be large.</li>
+  <li>It works only with <b>owned</b> objects. Semaphores, event groups and queues have no owner to boost.</li>
+  <li>It cannot help if the owner is <b>blocked on something else</b> (a queue, a delay) while holding the mutex. Boosting a blocked task changes nothing.</li>
+</ul>
+
+<h2>Priority ceiling protocols</h2>
+<div class="box definition">
+  <p><span class="term">Priority ceiling</span> of a resource: the highest priority of any task that may lock it. It is fixed at design time, so every user of the resource must be known.</p>
+</div>
+<p><b>Original priority ceiling protocol (OCPP).</b> A task may lock a resource only if its priority is strictly higher than the ceilings of all resources currently locked by <em>other</em> tasks (the current "system ceiling"). Otherwise it blocks, and the task holding the resource that sets the system ceiling inherits its priority. Guarantees on a single processor: a task is blocked at most once, for at most the duration of one lower-priority critical section; chained blocking cannot occur; and deadlock cannot occur.</p>
+<p><b>Immediate priority ceiling protocol (IPCP</b>, also called "highest locker" or ceiling locking; it is POSIX <code>PTHREAD_PRIO_PROTECT</code>). When a task locks a resource, its priority is raised <em>immediately</em> to the resource's ceiling, and restored on unlock. A task that could contend for the resource cannot even start running while the resource is held, so it never blocks on it; it waits once, before it starts. Same worst-case blocking bound as OCPP, deadlock-free on a single processor provided tasks do not block while holding a resource, and simpler to implement. The price: the priority is raised on every lock, even when no contention would have happened.</p>
+<table>
+  <thead><tr><th></th><th>No protocol</th><th>Priority inheritance</th><th>Original ceiling</th><th>Immediate ceiling</th></tr></thead>
+  <tbody>
+    <tr><td>Unbounded inversion</td><td>possible</td><td>prevented</td><td>prevented</td><td>prevented</td></tr>
+    <tr><td>Times H can be blocked</td><td>unbounded</td><td>once per conflicting mutex / lower task (chains possible)</td><td>at most once</td><td>at most once</td></tr>
+    <tr><td>Prevents deadlock</td><td>no</td><td>no</td><td>yes (single CPU)</td><td>yes (single CPU, no blocking while holding)</td></tr>
+    <tr><td>Needs static knowledge of users</td><td>no</td><td>no</td><td>yes</td><td>yes</td></tr>
+    <tr><td>Priority changes</td><td>none</td><td>only under contention</td><td>only under contention</td><td>on every lock</td></tr>
+  </tbody>
+</table>
+
+<h2>Priority inversion timeline</h2>
+<div class="demo" data-demo="inversion">
+  <p class="demo-title">Interactive: the worked scenario, side by side</p>
+  <div class="demo-controls">
+    <label>Right-hand protocol
+      <select data-opt="protocol">
+        <option value="inherit">Priority inheritance</option>
+        <option value="ceiling">Immediate priority ceiling</option>
+      </select>
+    </label>
+    <button class="primary" data-act="play">Play</button>
+    <button data-act="step">Step</button>
+    <button data-act="all">Run to end</button>
+    <button data-act="reset">Reset</button>
+  </div>
+  <div class="split">
+    <div>
+      <h4>Plain mutex (no protocol)</h4>
+      <canvas data-side="left"></canvas>
+      <div class="metric" data-side="left"></div>
+      <div class="log" data-side="left"></div>
+    </div>
+    <div>
+      <h4 data-side="right">Mutex with priority inheritance</h4>
+      <canvas data-side="right"></canvas>
+      <div class="metric" data-side="right"></div>
+      <div class="log" data-side="right"></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span style="--sw: var(--t-high)">H (high)</span>
+    <span style="--sw: var(--t-med)">M (medium)</span>
+    <span style="--sw: var(--t-low)">L (low)</span>
+    <span style="--sw: repeating-linear-gradient(45deg, #888 0 2px, #fff 2px 4px)">hatched: holding the mutex</span>
+    <span style="--sw: var(--bad)">red outlined: blocked on the mutex</span>
+  </div>
+  <p class="kbd-hint">A coloured stripe above a running block shows the priority the task runs at when it differs from its own. Pale bars: Ready, not running. Black bar: task completed.</p>
+</div>
+<p>Switch the right-hand side to the immediate ceiling. L's priority rises the moment it locks at t = 1, so H, released at t = 2, does not preempt it: H waits <em>Ready</em> rather than blocked, and never blocks on the mutex at all. Its response time is the same 7 ticks as with inheritance.</p>
+
+<h2>Reducing inversion by design</h2>
+<ul>
+  <li><b>Keep critical sections short.</b> Every protocol bounds blocking by critical-section length; shorter sections mean a smaller bound.</li>
+  <li><b>Avoid sharing resources across distant priority levels.</b> If a high-rate control task and a background logger share data, pass it through a queue instead.</li>
+  <li><b>Use a gatekeeper task</b> for slow peripherals so high-priority tasks never wait on a lock held by a low-priority one.</li>
+  <li><b>Never block while holding a mutex.</b> Inheritance cannot speed up an owner that is waiting.</li>
+  <li><b>Remember non-lock inversions</b>: a high-priority task waiting on a queue that a low-priority task fills, or on a semaphore a low-priority task gives, is inverted too, and no protocol helps. Set the producer's priority to reflect the consumer's urgency.</li>
+</ul>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Protecting a resource with a binary semaphore</b>: no owner, so no inheritance. The scenario above is then exactly what happens.</li>
+    <li><b>Assuming inheritance makes long critical sections harmless.</b> It removes the medium-task interference; L's whole critical section still delays H.</li>
+    <li><b>Releasing nested mutexes out of order</b> in kernels whose inheritance assumes nesting; the owner can be left at the wrong priority.</li>
+    <li><b>Setting a priority ceiling lower than a real user's priority</b> (immediate ceiling). That user can then preempt the holder and the protection is lost.</li>
+    <li><b>Testing only on a lightly loaded system.</b> Unbounded inversion needs a medium task to run at exactly the wrong time; it appears under load in the field.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr: <code>k_mutex</code> inheritance</span>
+  <ul>
+    <li>Every <code>k_mutex</code> uses priority inheritance; there is nothing to enable. When a thread blocks in <code>k_mutex_lock()</code>, the owner is raised to the waiter's priority (if higher) and restored on <code>k_mutex_unlock()</code>.</li>
+    <li>The boost applies to the mutex's direct owner. The kernel source documents that mutexes contributing to inheritance must be released in reverse order of acquisition; follow a strict nested lock/unlock discipline.</li>
+    <li><code>CONFIG_PRIORITY_CEILING</code> limits how high inheritance can raise a thread (default −127, effectively no limit). It is a cap on inheritance, not an implementation of the priority ceiling protocol.</li>
+    <li>Zephyr has no built-in immediate-ceiling mutex. The same effect can be obtained by raising the thread's priority with <code>k_thread_priority_set()</code> around the critical section, or by <code>k_sched_lock()</code> for very short sections, which acts like a ceiling above every thread.</li>
+    <li><code>k_sem</code>, <code>k_event</code> and <code>k_msgq</code> never apply inheritance.</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="10_mutual_exclusion_and_deadlock.html" rel="prev">← Mutual exclusion and deadlock</a>
+  <a href="12_design_guidance.html" rel="next">Next: Design guidance and common mistakes →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+<script src="js/inversion_demo.js"></script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" font-size="13">
+  <title>Message queue as a ring buffer of fixed-size slots</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#30343f"/>
+    </marker>
+  </defs>
+  <rect width="860" height="300" fill="#ffffff"/>
+  <text x="430" y="28" text-anchor="middle" font-size="17" font-weight="700" fill="#1d232b">Message queue: fixed-size slots, messages copied in and out, FIFO order</text>
+
+  <rect x="20" y="96" width="140" height="56" rx="8" fill="#ffffff" stroke="#30343f" stroke-width="1.5"/>
+  <text x="90" y="120" text-anchor="middle" font-weight="700">Producer</text>
+  <text x="90" y="138" text-anchor="middle" font-size="12">sensor ISR or task</text>
+
+  <rect x="700" y="96" width="140" height="56" rx="8" fill="#ffffff" stroke="#30343f" stroke-width="1.5"/>
+  <text x="770" y="120" text-anchor="middle" font-weight="700">Consumer</text>
+  <text x="770" y="138" text-anchor="middle" font-size="12">processing task</text>
+
+  <!-- slots: index 0..5, items occupy 2,3,4 (tail = 2 oldest, head = 5 next write) -->
+  <g font-size="11.5" text-anchor="middle">
+    <rect x="240" y="100" width="64" height="48" fill="#f0f2f5" stroke="#5b6573"/>
+    <rect x="304" y="100" width="64" height="48" fill="#f0f2f5" stroke="#5b6573"/>
+    <rect x="368" y="100" width="64" height="48" fill="#e6efff" stroke="#1f6feb" stroke-width="2"/><text x="400" y="122">msg #7</text><text x="400" y="138" fill="#5b6573">oldest</text>
+    <rect x="432" y="100" width="64" height="48" fill="#e6efff" stroke="#1f6feb" stroke-width="2"/><text x="464" y="128">msg #8</text>
+    <rect x="496" y="100" width="64" height="48" fill="#e6efff" stroke="#1f6feb" stroke-width="2"/><text x="528" y="122">msg #9</text><text x="528" y="138" fill="#5b6573">newest</text>
+    <rect x="560" y="100" width="64" height="48" fill="#f0f2f5" stroke="#5b6573"/>
+    <text x="272" y="166" fill="#5b6573">slot 0</text><text x="336" y="166" fill="#5b6573">slot 1</text><text x="400" y="166" fill="#5b6573">slot 2</text>
+    <text x="464" y="166" fill="#5b6573">slot 3</text><text x="528" y="166" fill="#5b6573">slot 4</text><text x="592" y="166" fill="#5b6573">slot 5</text>
+  </g>
+  <path d="M624,124 C660,124 660,60 432,60 C250,60 240,80 256,96" fill="none" stroke="#9aa4b1" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#a)"/>
+  <text x="430" y="54" text-anchor="middle" font-size="11.5" fill="#5b6573">indices wrap around (ring buffer)</text>
+
+  <path d="M160,124 L236,124" stroke="#30343f" stroke-width="2" marker-end="url(#a)"/>
+  <text x="198" y="116" text-anchor="middle" font-size="12">put</text>
+  <path d="M398,196 L398,152" stroke="#c4314b" stroke-width="2" marker-end="url(#a)"/>
+  <text x="398" y="212" text-anchor="middle" font-size="12" fill="#c4314b">read index</text>
+  <path d="M592,196 L592,152" stroke="#1a7f37" stroke-width="2" marker-end="url(#a)"/>
+  <text x="592" y="212" text-anchor="middle" font-size="12" fill="#1a7f37">write index</text>
+  <path d="M640,150 C670,170 690,150 698,140" fill="none" stroke="#30343f" stroke-width="2" marker-end="url(#a)"/>
+  <text x="666" y="182" text-anchor="middle" font-size="12">get (copies msg #7 out)</text>
+
+  <g font-size="12.5" fill="#1d232b">
+    <text x="20" y="244">• put copies the message into a free slot; when every slot is full, put blocks (or fails at once with a zero timeout).</text>
+    <text x="20" y="264">• get copies the oldest message out; when the queue is empty, get blocks until a message arrives or the timeout expires.</text>
+    <text x="20" y="284">• An ISR may put or get only without waiting. The queue's buffer is allocated once, at creation: depth × message size bytes.</text>
+  </g>
+</svg>

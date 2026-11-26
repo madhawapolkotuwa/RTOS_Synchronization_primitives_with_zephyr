@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 360" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" font-size="13">
+  <title>Event group: setters and waiters</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#30343f"/>
+    </marker>
+  </defs>
+  <rect width="860" height="360" fill="#ffffff"/>
+  <text x="430" y="28" text-anchor="middle" font-size="17" font-weight="700" fill="#1d232b">Event group: one word of flags, many setters, many waiters</text>
+
+  <!-- setters -->
+  <g font-size="12.5">
+    <rect x="20" y="70" width="150" height="40" rx="6" fill="#ffffff" stroke="#30343f"/><text x="95" y="95" text-anchor="middle">ADC ISR</text>
+    <rect x="20" y="140" width="150" height="40" rx="6" fill="#ffffff" stroke="#30343f"/><text x="95" y="165" text-anchor="middle">Network thread</text>
+    <rect x="20" y="210" width="150" height="40" rx="6" fill="#ffffff" stroke="#30343f"/><text x="95" y="235" text-anchor="middle">Button ISR</text>
+  </g>
+
+  <!-- bits -->
+  <g text-anchor="middle" font-size="13" font-weight="700">
+    <text x="430" y="70" font-weight="700" font-size="14">event bits (bit 7 … bit 0)</text>
+    <rect x="270" y="132" width="40" height="44" fill="#f0f2f5" stroke="#5b6573"/><text x="290" y="160">0</text>
+    <rect x="310" y="132" width="40" height="44" fill="#f0f2f5" stroke="#5b6573"/><text x="330" y="160">0</text>
+    <rect x="350" y="132" width="40" height="44" fill="#f0f2f5" stroke="#5b6573"/><text x="370" y="160">0</text>
+    <rect x="390" y="132" width="40" height="44" fill="#f0f2f5" stroke="#5b6573"/><text x="410" y="160">0</text>
+    <rect x="430" y="132" width="40" height="44" fill="#f0f2f5" stroke="#5b6573"/><text x="450" y="160">0</text>
+    <rect x="470" y="132" width="40" height="44" fill="#e6f4ea" stroke="#1a7f37" stroke-width="2"/><text x="490" y="160" fill="#1a7f37">1</text>
+    <rect x="510" y="132" width="40" height="44" fill="#f0f2f5" stroke="#5b6573"/><text x="530" y="160">0</text>
+    <rect x="550" y="132" width="40" height="44" fill="#e6f4ea" stroke="#1a7f37" stroke-width="2"/><text x="570" y="160" fill="#1a7f37">1</text>
+  </g>
+  <g font-size="11" fill="#5b6573" text-anchor="middle">
+    <text x="570" y="192">bit 0</text><text x="570" y="205">SAMPLE_READY</text>
+    <text x="530" y="222">bit 1</text><text x="530" y="235">NET_UP</text>
+    <text x="490" y="192">bit 2</text><text x="490" y="205">BUTTON</text>
+  </g>
+
+  <path d="M170,90 C420,90 560,95 568,128" fill="none" stroke="#1a7f37" stroke-width="1.8" marker-end="url(#a)"/>
+  <path d="M170,160 C230,160 250,250 520,250 L528,240" fill="none" stroke="#30343f" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  <path d="M170,230 C300,230 300,108 486,108 L489,128" fill="none" stroke="#1a7f37" stroke-width="1.8" marker-end="url(#a)"/>
+  <text x="300" y="84" font-size="11.5" fill="#1a7f37">set bit 0</text>
+  <text x="250" y="262" font-size="11.5" fill="#5b6573">will set bit 1 later</text>
+  <text x="300" y="124" font-size="11.5" fill="#1a7f37">set bit 2</text>
+
+  <!-- waiters -->
+  <g font-size="12.5">
+    <rect x="660" y="80" width="186" height="64" rx="6" fill="#e6f4ea" stroke="#1a7f37"/>
+    <text x="753" y="102" text-anchor="middle" font-weight="700">Display task</text>
+    <text x="753" y="119" text-anchor="middle">waits ANY of bit 0 | bit 2</text>
+    <text x="753" y="135" text-anchor="middle" fill="#1a7f37" font-weight="700">→ released now</text>
+    <rect x="660" y="186" width="186" height="64" rx="6" fill="#fff6dd" stroke="#9a6700"/>
+    <text x="753" y="208" text-anchor="middle" font-weight="700">Upload task</text>
+    <text x="753" y="225" text-anchor="middle">waits ALL of bit 0 &amp; bit 1</text>
+    <text x="753" y="241" text-anchor="middle" fill="#9a6700" font-weight="700">→ still blocked</text>
+  </g>
+  <path d="M592,150 L658,118" stroke="#1a7f37" stroke-width="1.8" marker-end="url(#a)"/>
+  <path d="M592,160 L658,212" stroke="#9a6700" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#a)"/>
+
+  <g font-size="12" fill="#5b6573" text-anchor="middle">
+    <text x="430" y="300">Setting bits wakes every waiter whose condition is now true (broadcast). Bits stay set until cleared,</text>
+    <text x="430" y="318">either by the waiter on exit ("clear on exit") or explicitly. Setting a bit that is already set records nothing extra:</text>
+    <text x="430" y="336">an event group stores state, not a count.</text>
+  </g>
+</svg>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 · Scheduling — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part I · Lesson 02 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Scheduling</h1>
+<p class="lead">The scheduler decides which Ready task runs. Its policy determines how quickly an urgent task gets the CPU, which is the property every real-time guarantee rests on.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>List the scheduling points at which the kernel makes a decision.</li>
+    <li>Define fixed-priority preemptive scheduling and cooperative scheduling, and compare their latency and their effect on shared data.</li>
+    <li>Explain time slicing (round-robin) among tasks of equal priority.</li>
+    <li>Explain the role of the system tick and of tickless operation.</li>
+    <li>Read a scheduler timeline and identify preemptions, context switches and deadline misses.</li>
+  </ul>
+</div>
+
+<h2>Scheduling points</h2>
+<p>The scheduler does not run continuously. It runs at <strong>scheduling points</strong>, which are the only moments when the running task can change:</p>
+<ol>
+  <li>The running task <b>blocks</b> (waits on an object or delays) or terminates.</li>
+  <li>A task <b>becomes Ready</b>: another task or an ISR gave a semaphore, sent a message, set event bits, or a timeout expired.</li>
+  <li>The running task <b>yields</b> explicitly.</li>
+  <li>The <b>tick</b> interrupt fires and the time slice of the running task has expired.</li>
+  <li>A task's <b>priority changes</b> (explicitly, or by priority inheritance).</li>
+</ol>
+<p>When the decision happens inside an ISR, the actual switch is postponed until the outermost ISR returns. The ISR itself is never interrupted by a task.</p>
+
+<h2>Fixed-priority preemptive scheduling</h2>
+<div class="box definition">
+  <p><span class="term">Fixed-priority preemptive scheduling:</span> each task has a priority assigned by the designer. At every scheduling point the scheduler runs the highest-priority Ready task. If a task with a higher priority than the running task becomes Ready, it <em>preempts</em> the running task immediately; the preempted task returns to Ready.</p>
+</div>
+<p>This is the default policy of almost every RTOS. Its key property: <strong>the response time of a task depends only on tasks of higher or equal priority</strong> (and on ISRs and on blocking, covered in Part III). Adding a low-priority task can never delay a high-priority one. That is what makes timing analysable.</p>
+
+<h2>Cooperative scheduling</h2>
+<div class="box definition">
+  <p><span class="term">Cooperative (non-preemptive) scheduling:</span> the running task keeps the CPU until it blocks, terminates or yields. A higher-priority task that becomes Ready waits for that moment. Priorities only decide who runs <em>next</em>.</p>
+</div>
+<table>
+  <thead><tr><th></th><th>Preemptive</th><th>Cooperative</th></tr></thead>
+  <tbody>
+    <tr><td>Latency for an urgent task</td><td>Bounded by higher-priority work and ISRs only</td><td>Bounded by the <em>longest</em> run between yields of <em>any</em> task</td></tr>
+    <tr><td>Shared data between tasks</td><td>Any access can be interrupted by another task; needs mutexes or other protection</td><td>Code between two yields runs without interruption by other tasks; fewer locks needed</td></tr>
+    <tr><td>Shared data with ISRs</td><td colspan="2">Protection still required in both models: interrupts preempt every task.</td></tr>
+    <tr><td>Failure mode</td><td>Race conditions if protection is missing</td><td>One task that forgets to yield (or loops longer than expected) delays the whole system</td></tr>
+  </tbody>
+</table>
+<p>Many kernels support both, per task: a few cooperative tasks for short, non-interruptible sequences, and preemptive tasks for everything else.</p>
+
+<h2>Time slicing</h2>
+<div class="box definition">
+  <p><span class="term">Time slicing</span> (round-robin scheduling): among Ready tasks of the <em>same</em> priority, each runs for at most one time slice (quantum); when it expires, the running task moves to the back of the queue for its priority and the next equal-priority task runs.</p>
+</div>
+<p>Time slicing never lets a lower-priority task run while a higher-priority one is Ready. It only shares the CPU fairly between equals. Without it, an equal-priority task waits until the running one blocks. In real-time designs, equal priorities are usually avoided for tasks with deadlines, so time slicing matters mostly for background work.</p>
+
+<h2>The system tick</h2>
+<p>Delays, timeouts and time slices are measured by the kernel's clock. Classically a hardware timer interrupts at a fixed rate (the <strong>tick</strong>, for example every 1 ms), and the tick handler checks for expired timeouts. A <strong>tickless</strong> kernel instead programs the timer for the next deadline that actually matters, which saves power because the CPU is not woken for ticks where nothing happens. Either way, a delay of <em>n</em> ticks guarantees <em>at least</em> the requested time, rounded up to the tick resolution.</p>
+
+<h2>Scheduler timeline</h2>
+<div class="demo" data-demo="scheduler">
+  <p class="demo-title">Interactive: watch the scheduler decide</p>
+  <div class="demo-controls">
+    <label>Policy
+      <select data-opt="mode">
+        <option value="preemptive">Preemptive</option>
+        <option value="cooperative">Cooperative</option>
+      </select>
+    </label>
+    <label>Time slice
+      <select data-opt="slice">
+        <option value="0">off</option>
+        <option value="2">2 ticks</option>
+        <option value="3">3 ticks</option>
+      </select>
+    </label>
+    <label><input type="checkbox" data-opt="isr" checked> Interrupt + deferred handler</label>
+    <label><input type="checkbox" data-opt="twin"> Second low-priority task (equal priority)</label>
+  </div>
+  <div class="demo-controls">
+    <button class="primary" data-act="play">Play</button>
+    <button data-act="step">Step</button>
+    <button data-act="all">Run to end</button>
+    <button data-act="reset">Reset</button>
+  </div>
+  <canvas></canvas>
+  <div class="legend">
+    <span style="--sw: var(--t-high)">High: period 10, runs 2</span>
+    <span style="--sw: var(--t-med)">Medium: period 15, runs 4</span>
+    <span style="--sw: var(--t-low)">Low: runs 9 once</span>
+    <span style="--sw: #8e44ad">Deferred handler (top priority task)</span>
+    <span style="--sw: var(--t-isr)">ISR at t = 7 and t = 26</span>
+    <span style="--sw: var(--bad)">red mark under the axis: context switch</span>
+  </div>
+  <p class="kbd-hint">Thin pale bars mean Ready but not running. Triangles mark job releases. In this model tasks never yield in the middle of a job.</p>
+  <div class="status"></div>
+  <div class="log"></div>
+</div>
+<p>Try these experiments:</p>
+<ol>
+  <li><b>Preemptive, defaults.</b> High is released at t = 3 and runs at once, preempting Medium. Every High job completes within 2 ticks of release.</li>
+  <li><b>Switch to Cooperative.</b> Low starts at t = 0 and keeps the CPU until its 9 ticks of work are done. High, released at t = 3, waits until t = 12 and misses its deadline at t = 13. The ISR at t = 7 still runs on time (interrupts preempt even cooperative tasks), but the deferred handler it wakes must wait too.</li>
+  <li><b>Preemptive, second low task, time slice 2.</b> The two Low tasks alternate every 2 ticks when nothing more important is Ready. High and Medium are unaffected.</li>
+</ol>
+
+<h2>Worked example: reading the preemptive trace</h2>
+<div class="box example">
+  <span class="box-title">The first 10 ticks, preemptive policy</span>
+  <table>
+    <thead><tr><th>Tick</th><th>Event</th><th>Running</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td>Low released; nothing else Ready</td><td>Low</td></tr>
+      <tr><td>1</td><td>Medium released, higher than Low → preemption</td><td>Medium</td></tr>
+      <tr><td>3</td><td>High released, higher than Medium → preemption</td><td>High</td></tr>
+      <tr><td>5</td><td>High finished (blocks until t = 13); Medium resumes where it stopped</td><td>Medium</td></tr>
+      <tr><td>7</td><td>IRQ: the ISR runs for one tick and wakes the deferred handler</td><td>ISR</td></tr>
+      <tr><td>8–9</td><td>Deferred handler is the highest-priority Ready task</td><td>Handler</td></tr>
+      <tr><td>10</td><td>Nothing else is Ready; Low resumes its job</td><td>Low</td></tr>
+    </tbody>
+  </table>
+  <p>High's response time (release to completion) is 2 ticks, which equals its execution time: nothing outranks it except the handler and ISR. Medium's response time for its first job is 6 ticks: 4 of its own work plus 2 ticks of High's. Low absorbs all the interference and finishes last.</p>
+</div>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Expecting priority to mean "more CPU time".</b> Priority means "runs first when Ready". A high-priority task that blocks most of the time uses very little CPU.</li>
+    <li><b>Giving every task the same priority</b> and relying on time slicing. Response times then depend on every other task, which destroys the analysability preemption gives you.</li>
+    <li><b>Long cooperative sections.</b> In a cooperative task, every loop that does not block or yield adds to the latency of every other task.</li>
+    <li><b>Assuming a delay is exact.</b> A delay ends at the next tick boundary after the requested time, and the task then only becomes Ready: it runs when it is the highest-priority Ready task.</li>
+    <li><b>Forgetting the ISR load.</b> Interrupts outrank all tasks; heavy ISR work reduces the CPU available to every task, including the most urgent one.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr on the STM32F769I-DISCO</span>
+  <ul>
+    <li>Priorities: lower number = higher priority. <b>Negative priorities are cooperative</b> (<code>K_PRIO_COOP(n)</code>), <b>zero and positive are preemptible</b> (<code>K_PRIO_PREEMPT(n)</code>). The ranges come from <code>CONFIG_NUM_COOP_PRIORITIES</code> (default 16) and <code>CONFIG_NUM_PREEMPT_PRIORITIES</code> (default 15).</li>
+    <li>A cooperative thread can still be interrupted by ISRs, and it gives up the CPU when it blocks or calls <code>k_yield()</code>. A preemptible thread can make a section temporarily non-preemptible with <code>k_sched_lock()</code> / <code>k_sched_unlock()</code>.</li>
+    <li>Time slicing: <code>CONFIG_TIMESLICING=y</code>, <code>CONFIG_TIMESLICE_SIZE</code> in milliseconds, and <code>CONFIG_TIMESLICE_PRIORITY</code> (threads with a higher priority than this are not sliced). It can also be changed at run time with <code>k_sched_time_slice_set()</code>.</li>
+    <li>Tick rate: <code>CONFIG_SYS_CLOCK_TICKS_PER_SEC</code>. On this board the Cortex-M SysTick drives the kernel clock and the kernel is tickless by default.</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="01_tasks_and_states.html" rel="prev">← Tasks and task states</a>
+  <a href="03_context_switching.html" rel="next">Next: Context switching →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+<script src="js/scheduler_timeline.js"></script>
+</body>
+</html>

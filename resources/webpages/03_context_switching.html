@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 · Context Switching — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part I · Lesson 03 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Context switching</h1>
+<p class="lead">A context switch is how one CPU appears to run many tasks. Knowing exactly what is saved, where, and when explains both the cost of multitasking and why shared data can be corrupted.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Define a task's context and a context switch.</li>
+    <li>Describe the sequence of a context switch on an Arm Cortex-M using PendSV.</li>
+    <li>Explain why each task needs its own stack and what the stack must hold during a switch.</li>
+    <li>Estimate context-switch overhead and the effect of the FPU on it.</li>
+    <li>Explain why a context switch can happen between any two machine instructions, and why that makes unprotected shared data unsafe.</li>
+  </ul>
+</div>
+
+<h2>The concept</h2>
+<div class="box definition">
+  <p><span class="term">Context:</span> the processor state a task needs in order to continue: the general-purpose registers, the program counter, the stack pointer, the status register and, if the task uses floating point, the FPU registers.</p>
+  <p><span class="term">Context switch:</span> saving the context of the running task and restoring the context of another task, so that the new task continues exactly where it previously stopped.</p>
+</div>
+<p>A task never notices a context switch. From its point of view, the instructions run one after another; it is just that, sometimes, real time passes between two of them. That gap is invisible to the task's own logic but very visible to any other task that touched the same data in the meantime.</p>
+<p>Each task needs its own stack because the stack <em>is</em> most of the context: local variables, return addresses of every function on the call chain, and the saved registers all live there. The TCB only stores the saved stack pointer.</p>
+
+<h2>How it happens on Cortex-M</h2>
+<p>Cortex-M cores have features designed for an RTOS: two stack pointers (MSP for handler mode and the kernel, PSP for tasks), automatic register stacking on exception entry, and the <strong>PendSV</strong> exception. Kernels set PendSV to the lowest exception priority and perform the switch inside it. Any code, including an ISR, that makes a higher-priority task Ready just sets PendSV pending. PendSV then runs only after every other active interrupt has finished, so a context switch never delays an ISR.</p>
+<figure>
+  <img src="images/context_switch.svg" alt="Six-step sequence of a Cortex-M context switch with the stacks of Task A and Task B" width="860">
+  <figcaption>Figure 1 · The context of a task is split: hardware saves eight registers on exception entry, the kernel saves the remaining eight.</figcaption>
+</figure>
+<p>Two details matter in practice:</p>
+<ul>
+  <li><b>FPU context.</b> If a task has used the FPU, the hardware frame grows from 8 to 26 words (S0–S15 and FPSCR are added) and the kernel saves 16 more words (S16–S31). <em>Lazy stacking</em> reserves the space but only writes the FPU registers if the handler itself uses the FPU, which keeps the common case fast.</li>
+  <li><b>Interrupts use their own stack.</b> ISRs run on MSP, so the nesting depth of interrupts is paid once on the interrupt stack, not on every task stack. Each task stack only needs room for one exception frame.</li>
+</ul>
+
+<h3>An interrupt is not a context switch</h3>
+<p>Entering an ISR saves registers too, but it is an <em>exception entry</em>, not a switch between tasks. When the ISR returns without making a higher-priority task Ready, the same task simply continues. A context switch happens only when the scheduler chooses a different task.</p>
+
+<h2>Why this matters for shared data</h2>
+<p>A context switch can occur between <em>any</em> two instructions of a preemptible task, because an interrupt can arrive at any time and can make a higher-priority task Ready. A single line of C is usually several instructions:</p>
+<pre><code>shared_count++;     compiles to:   LDR  r0, [count]   ; read
+                                   ADDS r0, r0, #1    ; modify
+                                   STR  r0, [count]   ; write</code></pre>
+<p>If Task A is preempted after <code>LDR</code> and Task B increments the same counter, Task A then writes back its stale value plus one, and B's increment is lost. This is a <strong>race condition</strong>: the result depends on the timing of the switch. It is the motivating problem for all of Part II.</p>
+
+<h2>Worked example: what does switching cost?</h2>
+<div class="box example">
+  <span class="box-title">Overhead estimate on a 216 MHz Cortex-M7</span>
+  <p>Assume a measured switch cost of 200 CPU cycles (save, scheduler decision, restore; a realistic order of magnitude for a small RTOS, but always measure on your own build). At 216 MHz:</p>
+  <p style="text-align:center"><code>200 cycles ÷ 216 MHz ≈ 0.93 µs per switch</code></p>
+  <p>A design with a 1 kHz control task, a 2 kHz sensor task and assorted communication has about 6000 switches per second (each wake-up costs one switch in and one out):</p>
+  <p style="text-align:center"><code>6000 × 0.93 µs ≈ 5.6 ms per second ≈ 0.56 % CPU</code></p>
+  <p>Small, but not free. The same arithmetic at 100 kHz (a task per ADC sample) gives about 19 % of the CPU spent switching, which is why very high rates are handled in ISRs, DMA or batches, not by waking a task per event.</p>
+</div>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Assuming switches happen only at function calls or at "safe" points.</b> In a preemptive kernel they happen between any two instructions.</li>
+    <li><b>Assuming a single C statement is atomic.</b> Read-modify-write sequences, 64-bit accesses on a 32-bit core, and bit-field updates are all several instructions.</li>
+    <li><b>Using the FPU from several tasks without enabling FPU context saving.</b> If the kernel does not save FPU registers, one task's floating-point state silently corrupts another's.</li>
+    <li><b>Waking a task per tiny event.</b> When the switch cost approaches the work done per wake-up, batch the events.</li>
+    <li><b>Large local arrays in tasks.</b> They live on the task stack, which must also hold the saved context. Overflow corrupts whatever memory lies below the stack.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr on the STM32F769I-DISCO</span>
+  <ul>
+    <li>Zephyr's Cortex-M port performs the switch in PendSV exactly as described; threads run on PSP, ISRs on the interrupt stack (<code>CONFIG_ISR_STACK_SIZE</code>, default 2048 bytes).</li>
+    <li>The STM32F769 has a double-precision FPU (FPv5-D16). Enable it with <code>CONFIG_FPU=y</code>; if more than one thread uses floating point, also set <code>CONFIG_FPU_SHARING=y</code> so FPU registers are part of every thread's saved context.</li>
+    <li>To see and count switches: <code>CONFIG_THREAD_RUNTIME_STATS</code> with <code>k_thread_runtime_stats_get()</code>, or <code>CONFIG_TRACING</code> with a trace back-end such as SEGGER SystemView.</li>
+    <li>Atomic read-modify-write without locks: the <code>atomic_t</code> API (<code>atomic_inc()</code>, <code>atomic_cas()</code>, …), covered again in Lesson 12.</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="02_scheduling.html" rel="prev">← Scheduling</a>
+  <a href="04_interrupts_and_deferred_processing.html" rel="next">Next: Interrupts and deferred processing →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+# Application options for 03_mutexes.
+# Change them in prj.conf; no code edits are needed for most experiments.
+
+mainmenu "03_mutexes"
+
+choice APP_BUS_LOCK
+	prompt "What protects the shared bus"
+	default APP_LOCK_MUTEX
+
+config APP_LOCK_MUTEX
+	bool "A k_mutex (correct)"
+
+config APP_LOCK_SEMAPHORE
+	bool "A binary k_sem used as a lock (wrong tool)"
+	help
+	  Works until a thread locks twice: a semaphore is not recursive,
+	  so the second take waits for a give that only the same thread
+	  could do.
+
+config APP_LOCK_NONE
+	bool "Nothing (broken)"
+	help
+	  Transactions of the two sensor threads interleave on the bus.
+
+endchoice
+
+config APP_BUS_STEP_US
+	int "Simulated time of one bus step (us)"
+	default 100
+	help
+	  One step is roughly one byte on a 100 kHz I2C bus. A register
+	  read has three steps, so it keeps the bus busy for 3 x this.
+
+config APP_LOCK_TIMEOUT_MS
+	int "How long a thread waits for the bus lock (ms)"
+	default 100
+	help
+	  On timeout the lock call returns -EAGAIN, the transaction is
+	  skipped and counted as a lock timeout.
+
+config APP_ACCEL_WORK_IN_LOCK_MS
+	int "Processing time the accelerometer thread spends while still holding the lock (ms)"
+	default 0
+	help
+	  0 = correct: release the bus before processing. Anything else
+	  shows the cost of a critical section that is too large.
+
+config APP_OWNERSHIP_TOUR
+	bool "Run the ownership tour at startup"
+	default y
+
+config APP_REPORT_PERIOD_MS
+	int "Period of the statistics report (ms)"
+	default 2000
+
+source "Kconfig.zephyr"

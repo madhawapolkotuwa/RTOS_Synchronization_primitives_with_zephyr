@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RTOS Synchronization Primitives — Course Home</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Theory course · 12 lessons</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>RTOS Synchronization Primitives</h1>
+<p class="lead">The theory foundation for designing multi-threaded firmware with a real-time operating system: how tasks are scheduled, how they communicate and synchronise, what goes wrong, and how to design so it doesn't.</p>
+
+<div class="box objectives">
+  <span class="box-title">After this course you will be able to</span>
+  <ul>
+    <li>Explain how a preemptive RTOS schedules tasks, switches context and handles interrupts.</li>
+    <li>Choose correctly between semaphores, mutexes, event groups, task notifications and message queues.</li>
+    <li>Recognise and prevent deadlock using the four Coffman conditions.</li>
+    <li>Explain priority inversion and how priority inheritance and priority ceilings bound it.</li>
+    <li>Assign priorities, size stacks, protect shared state and use the kernel safely from ISRs.</li>
+  </ul>
+</div>
+
+<h2>How to use this course</h2>
+<p>Work through the lessons in order; each one builds on the previous. Every lesson has the same structure: <b>learning objectives</b>, the <b>concept</b> in plain language with precise definitions, a <b>diagram or interactive animation</b>, a <b>worked example</b>, <b>common mistakes</b>, and a <b>"What this becomes in Zephyr"</b> note that names the equivalent API on the STM32F769I-DISCO board. The concepts are platform-neutral; the Zephyr notes connect them to the hands-on tutorial series that follows.</p>
+<p>Navigate with the sidebar, the links at the bottom of each page, or the ← and → keys.</p>
+
+<h2>Learning path</h2>
+
+<h3>Part I · Foundations</h3>
+<div class="cards">
+  <a class="card" href="01_tasks_and_states.html"><span class="card-num">LESSON 01</span><span class="card-title">Tasks and task states</span><span class="card-desc">Real-time defined; what a task is; Running, Ready, Blocked, Suspended; the idle task.</span></a>
+  <a class="card" href="02_scheduling.html"><span class="card-num">LESSON 02 · ANIMATION</span><span class="card-title">Scheduling</span><span class="card-desc">Preemptive vs cooperative, time slicing, the tick. Interactive scheduler timeline.</span></a>
+  <a class="card" href="03_context_switching.html"><span class="card-num">LESSON 03</span><span class="card-title">Context switching</span><span class="card-desc">What is saved and where, PendSV on Cortex-M, FPU context, cost, and why races happen.</span></a>
+  <a class="card" href="04_interrupts_and_deferred_processing.html"><span class="card-num">LESSON 04</span><span class="card-title">Interrupts and deferred processing</span><span class="card-desc">Latency, ISR rules, zero-latency interrupts, handler tasks and work queues.</span></a>
+</div>
+
+<h3>Part II · Communication and synchronization</h3>
+<div class="cards">
+  <a class="card" href="05_semaphores.html"><span class="card-num">LESSON 05 · ANIMATION</span><span class="card-title">Semaphores</span><span class="card-desc">Binary and counting semaphores for signalling and resource pools. Handoff demo.</span></a>
+  <a class="card" href="06_mutexes.html"><span class="card-num">LESSON 06 · ANIMATION</span><span class="card-title">Mutexes</span><span class="card-desc">Ownership, recursion, priority inheritance, and the alternatives for mutual exclusion.</span></a>
+  <a class="card" href="07_event_groups_and_notifications.html"><span class="card-num">LESSON 07</span><span class="card-title">Event groups and task notifications</span><span class="card-desc">AND/OR waits and broadcast; the lightest one-to-one signal.</span></a>
+  <a class="card" href="08_message_queues.html"><span class="card-num">LESSON 08</span><span class="card-title">Message queues</span><span class="card-desc">Copy vs reference, ownership transfer, sizing, full-queue policies.</span></a>
+  <a class="card" href="09_choosing_a_primitive.html"><span class="card-num">LESSON 09</span><span class="card-title">Choosing a primitive</span><span class="card-desc">Decision procedure and side-by-side comparison of every primitive.</span></a>
+</div>
+
+<h3>Part III · Hazards</h3>
+<div class="cards">
+  <a class="card" href="10_mutual_exclusion_and_deadlock.html"><span class="card-num">LESSON 10 · ANIMATION</span><span class="card-title">Mutual exclusion and deadlock</span><span class="card-desc">Race conditions, the four Coffman conditions, and how to break each one. Deadlock visualisation.</span></a>
+  <a class="card" href="11_priority_inversion.html"><span class="card-num">LESSON 11 · ANIMATION</span><span class="card-title">Priority inversion</span><span class="card-desc">Unbounded inversion, priority inheritance, priority ceiling protocols. Side-by-side timeline.</span></a>
+</div>
+
+<h3>Part IV · Design practice</h3>
+<div class="cards">
+  <a class="card" href="12_design_guidance.html"><span class="card-num">LESSON 12</span><span class="card-title">Design guidance and common mistakes</span><span class="card-desc">Priorities and response-time analysis, stack sizing, shared state, ISR-safe APIs, review checklist.</span></a>
+</div>
+
+<h2>Interactive animations</h2>
+<table>
+  <thead><tr><th>Animation</th><th>Lesson</th><th>What it shows</th></tr></thead>
+  <tbody>
+    <tr><td>Scheduler timeline</td><td><a href="02_scheduling.html">02</a></td><td>Task switching under preemptive and cooperative policies, time slicing, an ISR with a deferred handler, deadline misses.</td></tr>
+    <tr><td>Semaphore / mutex handoff</td><td><a href="05_semaphores.html">05</a>, <a href="06_mutexes.html">06</a></td><td>Take/give and lock/unlock by three tasks and an ISR; wait queues; lost events; ownership; recursive locking; priority inheritance.</td></tr>
+    <tr><td>Deadlock visualisation</td><td><a href="10_mutual_exclusion_and_deadlock.html">10</a></td><td>A resource-allocation graph forming a cycle, with the four Coffman conditions lit; then one scenario for breaking each condition.</td></tr>
+    <tr><td>Priority inversion timeline</td><td><a href="11_priority_inversion.html">11</a></td><td>The same task set with a plain mutex and with priority inheritance (or immediate ceiling), side by side, with H's response time.</td></tr>
+  </tbody>
+</table>
+
+<h2>Target platform for the tutorials</h2>
+<p>The concepts apply to any RTOS. The Zephyr notes and the later tutorial series use <b>Zephyr RTOS</b> on the <b>STMicroelectronics STM32F769I-DISCO</b>: an STM32F769NI microcontroller with a single Arm Cortex-M7 core at up to 216 MHz, double-precision FPU, L1 instruction and data caches, 2 MB flash and 512 KB SRAM.</p>
+<p>Two conventions to keep in mind when moving between the theory and Zephyr:</p>
+<ul>
+  <li>In the lessons, "higher priority" means more urgent. In Zephyr, <b>a lower number is a higher priority</b>, and negative numbers are cooperative.</li>
+  <li>The lessons say <em>task</em>; Zephyr says <em>thread</em>. They are the same thing.</li>
+</ul>
+
+<footer class="site-footer">
+  <p>Static diagrams are in <code>resources/images/</code> as SVG. All pages work offline from the file system; no external libraries are used.</p>
+</footer>
+
+<nav class="pager">
+  <span></span>
+  <a href="01_tasks_and_states.html" rel="next">Start: Tasks and task states →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+</body>
+</html>

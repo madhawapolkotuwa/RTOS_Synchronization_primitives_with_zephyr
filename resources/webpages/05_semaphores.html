@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 · Semaphores — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part II · Lesson 05 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Semaphores: binary and counting</h1>
+<p class="lead">The semaphore is the oldest synchronisation primitive and the most general. It is the right tool for signalling and for counting, and the wrong tool for protecting shared data.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>State the definition of a semaphore and its two operations.</li>
+    <li>Distinguish binary and counting semaphores and their initial values for each use.</li>
+    <li>Use a semaphore for ISR-to-task signalling and for managing a pool of identical resources.</li>
+    <li>Explain why a binary semaphore loses events and when that matters.</li>
+    <li>Explain why a semaphore should not be used where a mutex belongs.</li>
+  </ul>
+</div>
+
+<h2>The concept</h2>
+<div class="box definition">
+  <p><span class="term">Semaphore</span> (E. W. Dijkstra, 1965): a non-negative integer count with two indivisible operations.</p>
+  <ul>
+    <li><b>take</b> (also wait, P, pend): if the count is greater than zero, decrement it and continue; otherwise block until it is greater than zero.</li>
+    <li><b>give</b> (also signal, V, post): if a task is blocked on the semaphore, make one of them Ready and let it complete its take; otherwise increment the count.</li>
+  </ul>
+  <p>A <span class="term">counting semaphore</span> has an upper limit greater than one. A <span class="term">binary semaphore</span> has a limit of one: its count is either 0 or 1.</p>
+</div>
+<p>Read the count as "the number of things available": events that have happened and not yet been consumed, or free units of a resource. A semaphore has <strong>no owner</strong>. Any task, and any ISR, may give it; the task that gives is often not the task that takes.</p>
+<figure>
+  <img src="images/semaphore_vs_mutex.svg" alt="Left: counting semaphore with tokens given by tasks and an ISR and taken by other tasks. Right: mutex with an owner and a blocked higher-priority task." width="860">
+  <figcaption>Figure 1 · A semaphore counts; a mutex (next lesson) locks and has an owner.</figcaption>
+</figure>
+<p>Details that matter in real kernels:</p>
+<ul>
+  <li><b>Who wakes first.</b> When several tasks wait, most RTOSes wake the highest-priority waiter, and the longest-waiting one among equals. A few offer pure FIFO order. Know which yours does.</li>
+  <li><b>Direct handoff.</b> When give finds a waiter, the unit goes straight to that task; the count does not go up and down. No third task can sneak in and take it.</li>
+  <li><b>Saturation.</b> A give when the count is already at its limit has no effect. For a binary semaphore, a second event before the first was consumed is lost.</li>
+  <li><b>Timeouts.</b> take accepts a timeout: wait forever, do not wait at all (poll), or wait up to a bounded time. On timeout, take returns an error and the task did not get a unit. Always check it.</li>
+</ul>
+
+<h2>When to use a semaphore</h2>
+<table>
+  <thead><tr><th>Use</th><th>Type</th><th>Initial count</th><th>Pattern</th></tr></thead>
+  <tbody>
+    <tr><td>Signal an event: "data ready", "transfer complete"</td><td>Binary</td><td>0</td><td>Waiter takes (blocks); ISR or other task gives.</td></tr>
+    <tr><td>Count events that may arrive in bursts</td><td>Counting</td><td>0</td><td>Each event gives once; the handler takes once per event.</td></tr>
+    <tr><td>Manage N identical resources (buffers, DMA channels, connection slots)</td><td>Counting</td><td>N</td><td>Take before using a unit, give when returning it.</td></tr>
+    <tr><td>Rendezvous: two tasks wait for each other</td><td>Two binary</td><td>0 and 0</td><td>Each gives the other's semaphore and then takes its own.</td></tr>
+  </tbody>
+</table>
+
+<h2>When not to use a semaphore</h2>
+<ul>
+  <li><b>To protect shared data (mutual exclusion).</b> It works in the simple case but has three flaws a mutex fixes: any task can give it by mistake and let two tasks in; there is no owner, so no priority inheritance, and you are exposed to unbounded priority inversion (<a href="11_priority_inversion.html">Lesson 11</a>); a task that takes it twice deadlocks itself.</li>
+  <li><b>To pass data.</b> A semaphore carries no payload. A semaphore plus a shared variable is a home-made, buggy queue; use a <a href="08_message_queues.html">message queue</a>.</li>
+  <li><b>To wait for a combination of conditions or to wake several tasks.</b> A give wakes exactly one waiter. Use an <a href="07_event_groups_and_notifications.html">event group</a>.</li>
+  <li><b>For one-to-one signalling where the kernel offers task notifications</b> and you need neither multiple waiters nor counting beyond what notifications provide: notifications are cheaper.</li>
+</ul>
+
+<h2>Semaphore handoff demo</h2>
+<div class="demo" data-demo="handoff" data-default="binary">
+  <p class="demo-title">Interactive: take, give, block, hand off</p>
+  <div class="demo-controls">
+    <label>Object
+      <select data-opt="mode">
+        <option value="binary">Binary semaphore</option>
+        <option value="counting">Counting semaphore</option>
+        <option value="mutex">Mutex</option>
+      </select>
+    </label>
+    <button class="primary" data-act="scenario">Play scenario</button>
+    <button data-act="isr">ISR: give</button>
+    <button data-act="reset">Reset</button>
+  </div>
+  <div class="hd-stage"></div>
+  <div class="status"></div>
+  <div class="log"></div>
+</div>
+<p>Start with <b>Play scenario</b> for the binary semaphore: it shows a task waiting for an interrupt, and then two interrupts collapsing into one count. Then switch to the counting semaphore and press the buttons yourself. Make two tasks wait, then give from a third, and notice which one is woken.</p>
+
+<h2>Worked examples</h2>
+<div class="box example">
+  <span class="box-title">1 · Waiting for an ADC conversion (binary, initial 0)</span>
+  <ol>
+    <li>The sampling task starts a conversion and calls take with a 5 ms timeout. The count is 0, so it blocks.</li>
+    <li>About 2 µs later the conversion-complete ISR reads the result into a variable and gives the semaphore.</li>
+    <li>The give finds a waiter: the sampling task becomes Ready and, being higher priority than whatever was running, is switched in when the ISR returns.</li>
+    <li>take returns success; the task reads the result. Had the ADC failed, take would have returned a timeout error after 5 ms instead of hanging forever.</li>
+  </ol>
+  <p>Why initial 0: with initial 1 the first take would succeed immediately, before any conversion finished, and the task would read a stale result.</p>
+</div>
+<div class="box example">
+  <span class="box-title">2 · A pool of four transmit buffers (counting, initial 4, limit 4)</span>
+  <p>Four tasks share four DMA buffers. Before writing a buffer a task takes the semaphore; the DMA-complete ISR gives it back. When all four are in flight the count is 0 and the next sender blocks until a transfer completes, which gives natural back-pressure. The semaphore only counts free buffers; a separate structure (a free list, protected or lock-free) records <em>which</em> buffer is free.</p>
+</div>
+
+<h2>How it differs from the other primitives</h2>
+<table>
+  <thead><tr><th>Compared with</th><th>Difference</th></tr></thead>
+  <tbody>
+    <tr><td>Mutex</td><td>A mutex has an owner, can only be released by that owner, supports priority inheritance and cannot be used from an ISR. A semaphore has none of these properties.</td></tr>
+    <tr><td>Event group</td><td>A semaphore counts and wakes one waiter per give. An event group stores independent flags, supports AND/OR waits and wakes every waiter whose condition is met.</td></tr>
+    <tr><td>Task notification</td><td>A notification targets one specific task and needs no separate object; a semaphore is a shared object any task can wait on.</td></tr>
+    <tr><td>Message queue</td><td>A queue carries data and counts messages; a semaphore only counts.</td></tr>
+  </tbody>
+</table>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Wrong initial count.</b> 1 instead of 0 for signalling (the first wait falls through); 0 instead of N for a pool (everyone blocks forever).</li>
+    <li><b>Using a binary semaphore to count.</b> Events that arrive faster than they are consumed collapse into one. Use a counting semaphore or a queue when each event matters.</li>
+    <li><b>Ignoring the return value of take.</b> After a timeout the task does not have the unit; proceeding as if it did corrupts the resource accounting.</li>
+    <li><b>Giving more than you took</b> in a resource pool. The count drifts above the real number of resources; set the limit equal to N so the kernel caps it.</li>
+    <li><b>Using a semaphore as a lock.</b> See "When not to use".</li>
+    <li><b>Waiting with a timeout from an ISR.</b> Only the no-wait form of take is legal there.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr: <code>struct k_sem</code></span>
+  <ul>
+    <li>Define with <code>K_SEM_DEFINE(name, initial_count, limit)</code> or initialise with <code>k_sem_init()</code>. A binary semaphore is <code>limit = 1</code>; <code>K_SEM_MAX_LIMIT</code> gives an effectively unbounded counter.</li>
+    <li><code>k_sem_take(&amp;sem, timeout)</code> returns 0 on success, <code>-EBUSY</code> if called with <code>K_NO_WAIT</code> and the count is 0, <code>-EAGAIN</code> on timeout. Timeouts: <code>K_FOREVER</code>, <code>K_NO_WAIT</code>, <code>K_MSEC(n)</code>.</li>
+    <li><code>k_sem_give()</code> is ISR-safe. It wakes the highest-priority waiter (longest-waiting among equals), and saturates at the limit.</li>
+    <li><code>k_sem_count_get()</code> reads the count; <code>k_sem_reset()</code> sets it to 0 and makes current waiters return <code>-EAGAIN</code>.</li>
+    <li>Zephyr semaphores do not perform priority inheritance. Use <code>k_mutex</code> for locking.</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="04_interrupts_and_deferred_processing.html" rel="prev">← Interrupts and deferred processing</a>
+  <a href="06_mutexes.html" rel="next">Next: Mutexes →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+<script src="js/handoff_demo.js"></script>
+</body>
+</html>

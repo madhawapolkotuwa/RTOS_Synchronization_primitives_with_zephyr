@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>07 · Event Groups and Task Notifications — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part II · Lesson 07 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Event groups and task notifications</h1>
+<p class="lead">A semaphore signals one event to one waiter. Event groups extend signalling to many conditions and many waiters; task notifications strip it down to the cheapest possible one-to-one signal.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Define an event group and its set, clear and wait operations, including AND/OR waits.</li>
+    <li>Explain the difference between storing state (event bits) and counting events (semaphores).</li>
+    <li>Use an event group to wait for several conditions and to broadcast to several tasks.</li>
+    <li>Define a task notification and list the ways it can emulate a semaphore, an event group or a one-word mailbox.</li>
+    <li>State the limits of task notifications and choose between the two mechanisms.</li>
+  </ul>
+</div>
+
+<h2>Event groups</h2>
+<div class="box definition">
+  <p><span class="term">Event group</span> (event flags, event object): a kernel object holding a word of independent bits, each representing a condition. Operations:</p>
+  <ul>
+    <li><b>set</b> bits (OR them in): every waiting task whose condition becomes true is made Ready.</li>
+    <li><b>clear</b> bits.</li>
+    <li><b>wait</b> for a set of bits, with a mode: <em>any</em> (OR: at least one bit set) or <em>all</em> (AND: every bit set), optionally clearing the bits when the wait succeeds, and with a timeout.</li>
+  </ul>
+</div>
+<figure>
+  <img src="images/event_group.svg" alt="Event group with bits set by ISRs and a network thread; one waiter waiting for any of two bits is released, another waiting for all of two bits is still blocked" width="860">
+  <figcaption>Figure 1 · Bits record conditions. Each waiter states its own condition over those bits.</figcaption>
+</figure>
+<p>Three properties set event groups apart:</p>
+<ul>
+  <li><b>State, not count.</b> A bit is set or it is not. Setting a bit that is already set records nothing. Like a binary semaphore, it loses repetitions.</li>
+  <li><b>Broadcast.</b> One set can release <em>every</em> task whose condition is met, unlike a semaphore give, which releases one.</li>
+  <li><b>Combined conditions.</b> One wait can express "A and B and C" or "A or B", which would otherwise need several semaphores and careful ordering.</li>
+</ul>
+<p>A consequence of broadcast: the time a set operation takes depends on how many tasks are waiting, so it is not constant. Some kernels therefore do not perform the set directly inside an ISR but defer it to a kernel task. Check your kernel's documentation for its ISR behaviour.</p>
+
+<h3>When to use an event group</h3>
+<ul>
+  <li>Waiting for several independent conditions: "network up AND time synchronised AND configuration loaded".</li>
+  <li>Waiting for the first of several sources: "button pressed OR timeout command OR low battery".</li>
+  <li>Broadcasting a system state change to several tasks: "shutdown requested".</li>
+  <li>Representing slowly changing system state that many tasks query.</li>
+</ul>
+<h3>When not to use one</h3>
+<ul>
+  <li>When every occurrence must be counted (use a counting semaphore or a queue).</li>
+  <li>When data must travel with the event (use a queue).</li>
+  <li>For mutual exclusion (use a mutex).</li>
+  <li>When the bits are cleared by one task while other tasks still need to see them. Decide who owns the clearing of each bit; with several waiters, "clear on exit" by one waiter can hide the event from the others.</li>
+</ul>
+
+<h2>Task notifications</h2>
+<div class="box definition">
+  <p><span class="term">Task notification:</span> a signal sent directly to one specific task, using a value and a pending flag stored in that task's own control block. No separate kernel object exists. The sender names the target task; the target waits for its own notification.</p>
+</div>
+<p>The sender chooses how the notification updates the target's value, which lets one mechanism emulate several primitives for the one-receiver case:</p>
+<table>
+  <thead><tr><th>Update action</th><th>Behaves like</th></tr></thead>
+  <tbody>
+    <tr><td>Increment the value; the receiver decrements it (or zeroes it) when it takes</td><td>A counting (or binary) semaphore owned by the receiver</td></tr>
+    <tr><td>OR bits into the value; the receiver waits and clears bits</td><td>An event group with exactly one waiter</td></tr>
+    <tr><td>Overwrite the value</td><td>A mailbox holding one word, newest value wins</td></tr>
+    <tr><td>Write only if no notification is pending</td><td>A one-word mailbox that never overwrites unread data</td></tr>
+  </tbody>
+</table>
+<p>The attraction is cost: no object to create, less RAM, and a faster path through the kernel because there is no wait list to manage. The limits follow from the design:</p>
+<ul>
+  <li><b>Exactly one receiver</b>, known to the sender. No broadcast, and no "any worker task may take this".</li>
+  <li><b>One word of state.</b> Several unrelated notifications to the same task must share the word (for example as separate bits).</li>
+  <li><b>The sender never blocks</b> waiting for the receiver to consume a previous notification; it overwrites, increments, or fails.</li>
+</ul>
+<p>Task notifications as a dedicated feature come from FreeRTOS. Other kernels offer the same idea through per-thread semaphores, per-thread event flags, or signals. The concept matters more than the API: if exactly one task ever waits for a signal, attach the signal to that task.</p>
+
+<h2>Worked examples</h2>
+<div class="box example">
+  <span class="box-title">1 · Start-up synchronisation with an event group</span>
+  <p>The upload task must not start until three things are true: the network is up (bit 0, set by the network task), the clock is synchronised (bit 1, set by the time task), and the configuration is loaded (bit 2, set by the storage task).</p>
+  <ul>
+    <li>The upload task waits for <em>all</em> of bits 0–2, without clearing them on exit.</li>
+    <li>The display task waits for <em>any</em> of the same bits to update its status icons.</li>
+    <li>If the network drops, the network task clears bit 0; the upload task, before each upload, waits again for <em>all</em> bits and so pauses automatically.</li>
+  </ul>
+  <p>With semaphores this would need three semaphores per waiting task and a fixed order of takes. And a semaphore that has been taken is gone, so the display task could not observe the same events.</p>
+</div>
+<div class="box example">
+  <span class="box-title">2 · SPI DMA completion with a notification</span>
+  <p>The SPI driver task starts a DMA transfer and waits for its notification with a 10 ms timeout. The DMA-complete ISR notifies the driver task by incrementing its value. Only the driver task ever waits for this event, so a separate semaphore would be pure overhead. If a second consumer ever needs the event, change to a semaphore or event group.</p>
+</div>
+
+<h2>How they differ from the other primitives</h2>
+<table>
+  <thead><tr><th></th><th>Binary semaphore</th><th>Counting semaphore</th><th>Event group</th><th>Task notification</th></tr></thead>
+  <tbody>
+    <tr><td>Stores</td><td>0/1</td><td>count</td><td>a word of independent bits</td><td>a word in the target TCB</td></tr>
+    <tr><td>Waiters</td><td>many, one woken per give</td><td>many, one woken per give</td><td>many, all whose condition is met</td><td>exactly one (the target)</td></tr>
+    <tr><td>AND/OR conditions</td><td>no</td><td>no</td><td>yes</td><td>bits only, one waiter</td></tr>
+    <tr><td>Counts repetitions</td><td>no</td><td>yes</td><td>no</td><td>yes, in increment mode</td></tr>
+    <tr><td>Separate object</td><td>yes</td><td>yes</td><td>yes</td><td>no</td></tr>
+  </tbody>
+</table>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Expecting an event group to count.</b> Three interrupts that set the same bit before the waiter runs look like one.</li>
+    <li><b>Clearing a bit that another waiter still needs.</b> With several waiters, clear-on-exit by one hides the event from the rest. Give each bit a single, clear owner.</li>
+    <li><b>Set-then-clear race.</b> Task A sets a bit and immediately clears it. A waiter that had not yet run may never see it. If the event must be noticed, let the consumer clear it.</li>
+    <li><b>Using a notification where two tasks may wait.</b> Notifications have exactly one receiver; a second task waiting for "the same" notification waits on its own, separate one.</li>
+    <li><b>Mixing unrelated meanings in one notification value</b> with different update actions (overwrite in one place, increment in another). The value becomes meaningless.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr: <code>struct k_event</code> and per-thread signalling</span>
+  <ul>
+    <li>Event groups are <b>event objects</b> (<code>CONFIG_EVENTS=y</code>): <code>K_EVENT_DEFINE()</code> / <code>k_event_init()</code>, 32 bits. <code>k_event_post()</code> ORs bits in; <code>k_event_set()</code> replaces the whole word; <code>k_event_set_masked()</code> and <code>k_event_clear()</code> change selected bits. All wake every waiter whose condition is met, and all may be called from ISRs.</li>
+    <li><code>k_event_wait()</code> waits for <em>any</em> bit, <code>k_event_wait_all()</code> for <em>all</em>. Both return the matching bits, or 0 on timeout. Their <code>reset</code> argument clears the tracked events <em>before</em> waiting; it is not a clear-on-exit. Clear consumed bits explicitly with <code>k_event_clear()</code>.</li>
+    <li>Zephyr has <b>no dedicated task-notification API</b>. The usual equivalents: a <code>k_sem</code> or <code>k_event</code> used by only one thread; <code>k_poll_signal_raise()</code> with <code>k_poll()</code>, which also carries an <code>int</code> result; or <code>k_wakeup()</code> to end a <code>k_sleep()</code> early.</li>
+    <li><code>k_poll()</code> also lets one thread wait on several different objects (semaphores, FIFOs, signals) at once, which covers some "wait for any of several sources" designs.</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="06_mutexes.html" rel="prev">← Mutexes</a>
+  <a href="08_message_queues.html" rel="next">Next: Message queues →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+</body>
+</html>

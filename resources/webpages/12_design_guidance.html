@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>12 · Design Guidance and Common Mistakes — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part IV · Lesson 12 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Design guidance and common mistakes</h1>
+<p class="lead">The previous lessons explained the mechanisms. This one turns them into design rules: how to assign priorities, how big to make stacks, how to keep shared state out of trouble, and how to use the kernel safely from interrupts.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Assign task priorities with the rate-monotonic and deadline-monotonic rules and check them with response-time analysis.</li>
+    <li>Size a task stack by estimate and by measurement, and protect it against overflow.</li>
+    <li>Apply ownership and message passing to minimise shared state, and protect what remains correctly.</li>
+    <li>Use the kernel API correctly from ISRs.</li>
+    <li>Review a design against a checklist of the most common beginner mistakes.</li>
+  </ul>
+</div>
+
+<h2>1 · Choosing task priorities</h2>
+<p>Priority expresses <b>urgency</b> (how soon after its trigger a task must finish), not <b>importance</b>. A safety monitor that runs once a second with a 1-second deadline can safely have a lower priority than a 1 kHz motor loop.</p>
+<div class="box definition">
+  <p><span class="term">Rate-monotonic priority assignment</span> (Liu &amp; Layland, 1973): for periodic tasks whose deadline equals their period, give higher priority to tasks with shorter periods. Among fixed-priority assignments it is optimal: if any fixed-priority order meets all deadlines, rate-monotonic does.</p>
+  <p><span class="term">Deadline-monotonic assignment:</span> when deadlines are shorter than periods, give higher priority to shorter deadlines. It is optimal in that case.</p>
+</div>
+<p>Two checks tell you whether a task set is schedulable:</p>
+<ul>
+  <li><b>Utilisation bound</b> (sufficient, not necessary): <i>n</i> tasks under rate-monotonic priorities meet all deadlines if <code>U = Σ Cᵢ/Tᵢ ≤ n(2<sup>1/n</sup> − 1)</code>. The bound is 0.828 for 2 tasks, 0.780 for 3, and tends to ln 2 ≈ 0.693. Above it the test is inconclusive, not failed.</li>
+  <li><b>Response-time analysis</b> (exact for this model): the worst-case response time of task <i>i</i> is the smallest fixed point of
+    <code>Rᵢ = Cᵢ + Bᵢ + Σ<sub>j ∈ hp(i)</sub> ⌈Rᵢ / Tⱼ⌉ · Cⱼ</code>,
+    where <i>C</i> is execution time, <i>T</i> period, <i>hp(i)</i> the higher-priority tasks, and <i>Bᵢ</i> the longest blocking by lower-priority tasks (critical sections, bounded by the protocols of Lesson 11). The task meets its deadline if <i>Rᵢ ≤ Dᵢ</i>.</li>
+</ul>
+
+<div class="box example">
+  <span class="box-title">Worked example: is this task set schedulable?</span>
+  <table>
+    <thead><tr><th>Task</th><th>C (ms)</th><th>T = D (ms)</th><th>Priority (rate-monotonic)</th></tr></thead>
+    <tbody>
+      <tr><td>τ1 motor loop</td><td>1</td><td>4</td><td>high</td></tr>
+      <tr><td>τ2 sensor fusion</td><td>2</td><td>6</td><td>medium</td></tr>
+      <tr><td>τ3 telemetry</td><td>3</td><td>12</td><td>low</td></tr>
+    </tbody>
+  </table>
+  <p><b>Utilisation:</b> 1/4 + 2/6 + 3/12 = 0.833 &gt; 0.780: the bound is inconclusive, so compute response times.</p>
+  <ul>
+    <li><b>τ1:</b> R = 1 ≤ 4 ✔</li>
+    <li><b>τ2:</b> R = 2 + ⌈2/4⌉·1 = 3; again 2 + ⌈3/4⌉·1 = 3 → R = 3 ≤ 6 ✔</li>
+    <li><b>τ3:</b> start R = 3. 3 + ⌈3/4⌉·1 + ⌈3/6⌉·2 = 6 → 3 + ⌈6/4⌉·1 + ⌈6/6⌉·2 = 7 → 3 + 2 + ⌈7/6⌉·2 = 9 → 3 + ⌈9/4⌉·1 + ⌈9/6⌉·2 = 10 → 3 + 3 + 4 = 10. R = 10 ≤ 12 ✔</li>
+  </ul>
+  <p>All deadlines are met. Now suppose τ3 and τ1 share a mutex and τ3 holds it for up to 1 ms. With inheritance, τ1 can be blocked once: B₁ = 1, so R₁ = 2 ≤ 4 ✔. τ2 can also be delayed by that critical section (τ3 runs it at τ1's priority), so B₂ = 1 and R₂ = 4 ≤ 6 ✔. Without inheritance B₁ is unbounded and the analysis cannot be done at all.</p>
+</div>
+<p>Practical rules:</p>
+<ul>
+  <li>Deferred-interrupt handler tasks go near the top; background work (logging, diagnostics, UI animation) goes to the bottom.</li>
+  <li>Use few distinct levels and leave gaps between them so tasks can be inserted later.</li>
+  <li>Give equal priority only to tasks without deadlines relative to each other.</li>
+  <li>Measure execution times on the target (worst case, with caches cold where it matters), not on a simulator.</li>
+</ul>
+
+<h2>2 · Sizing stacks</h2>
+<figure>
+  <img src="images/stack_layout.svg" alt="Layout of a task stack: entry frame, deepest call chain, exception frame, context save area, margin, unused area, guard region; plus a three-step sizing procedure" width="860">
+  <figcaption>Figure 1 · A task stack must hold its deepest call chain plus one exception frame and its saved context.</figcaption>
+</figure>
+<p>A stack that is too small does not fail cleanly. Without protection, the overflow silently overwrites whatever lies below it in memory, often another task's stack or a kernel object, and the crash appears somewhere unrelated. Treat stack sizing as a measured quantity:</p>
+<ol>
+  <li><b>Estimate</b> from the compiler's per-function stack usage along the deepest call path. Watch for recursion, large local arrays, variable-length arrays, and library calls: formatted printing with floating point can need over a kilobyte by itself.</li>
+  <li><b>Measure</b> by painting the stack with a known pattern at start-up, running the worst-case scenario (all features, error paths, maximum message sizes), and reading the high-water mark.</li>
+  <li><b>Add margin</b> above the measured peak (20–30 % is a common rule) and enable a hardware stack guard so an overflow faults at once at the guilty task.</li>
+</ol>
+<p>Interrupt nesting on Cortex-M uses the separate interrupt stack, so size that once for the deepest nesting of ISRs. Each task stack needs only one exception frame: 32 bytes, or 104 bytes when the FPU context is stacked, plus the kernel's saved registers.</p>
+
+<h2>3 · Avoiding shared-state bugs</h2>
+<p>Most concurrency bugs are shared-state bugs. The most effective fix is to have less shared state.</p>
+<ol>
+  <li><b>Give every piece of data one owner.</b> Only the owning task writes it. Others receive copies through queues or ask the owner through requests.</li>
+  <li><b>Prefer message passing to shared variables.</b> A queue transfers data and synchronisation in one operation with no lock in user code.</li>
+  <li><b>Make data immutable where possible.</b> Configuration tables written once at start-up and read-only afterwards need no lock.</li>
+  <li><b>Protect what must be shared, consistently.</b> One lock per invariant; every access uses it; check-then-act stays inside one critical section.</li>
+  <li><b>Use atomics for single words</b> (counters, flags, reference counts) instead of locks.</li>
+  <li><b>Know what <code>volatile</code> does.</b> It forces the compiler to perform each access, which is required for hardware registers and ISR-written flags. It does <em>not</em> make read-modify-write atomic and does not replace a lock.</li>
+  <li><b>Watch for torn reads.</b> On a 32-bit core, a 64-bit timestamp or a multi-field structure is read in several instructions; a writer can run between them.</li>
+  <li><b>Remember the hardware as a concurrent actor.</b> On a Cortex-M7 with a data cache, a DMA engine and the CPU can see different contents of the same buffer. Place DMA buffers in non-cacheable memory or perform explicit cache clean/invalidate operations.</li>
+</ol>
+
+<h2>4 · Using the kernel safely from ISRs</h2>
+<table>
+  <thead><tr><th>Allowed in an ISR</th><th>Not allowed in an ISR</th></tr></thead>
+  <tbody>
+    <tr><td>
+      <ul>
+        <li>give a semaphore</li>
+        <li>take a semaphore without waiting</li>
+        <li>send to / receive from a queue without waiting</li>
+        <li>set or clear event bits (check whether your kernel defers it)</li>
+        <li>send a task notification</li>
+        <li>submit work to a work queue</li>
+        <li>atomic operations</li>
+      </ul>
+    </td><td>
+      <ul>
+        <li>any call with a non-zero timeout</li>
+        <li>sleeping or delaying</li>
+        <li>locking or unlocking a mutex</li>
+        <li>waiting on event bits</li>
+        <li>calls that allocate from a heap that uses locks</li>
+        <li>any kernel call from a zero-latency interrupt</li>
+        <li>long formatted printing</li>
+      </ul>
+    </td></tr>
+  </tbody>
+</table>
+<p>Some kernels have separate "from ISR" variants of each call; others, including Zephyr, use the same function and require the no-wait timeout from interrupt context. Either way, check the documentation of every call you place in an ISR.</p>
+
+<h2>5 · Common beginner mistakes</h2>
+<div class="box mistakes">
+  <span class="box-title">The checklist: review every design against it</span>
+  <ol>
+    <li>Busy-waiting or polling in a task instead of blocking on a kernel object (Lesson 01).</li>
+    <li>Using delays as synchronisation ("by then it will be ready") (Lesson 01).</li>
+    <li>Priorities assigned by "importance" or all equal (Lesson 02, Section 1 above).</li>
+    <li>Assuming a C statement such as <code>x++</code> is atomic (Lesson 03).</li>
+    <li>Using the FPU from several tasks without FPU context saving (Lesson 03).</li>
+    <li>Doing heavy work in an ISR, or calling blocking APIs there (Lesson 04).</li>
+    <li>Wrong initial semaphore count; binary semaphores used to count events (Lesson 05).</li>
+    <li>A semaphore used as a lock, losing ownership checks and priority inheritance (Lessons 05, 06, 11).</li>
+    <li>A mutex left locked on an error path, or locked in some accesses but not others (Lesson 06).</li>
+    <li>Clearing an event bit another waiter still needed (Lesson 07).</li>
+    <li>Sending a pointer to a stack variable through a queue; using a buffer after its ownership moved (Lesson 08).</li>
+    <li>Queues sized by guesswork, with send failures ignored (Lesson 08).</li>
+    <li>Two locks acquired in different orders by different tasks (Lesson 10).</li>
+    <li>Blocking (on a queue, a semaphore, a delay) while holding a mutex (Lessons 10, 11).</li>
+    <li>Infinite timeouts everywhere, so design errors become silent hangs (Lesson 10).</li>
+    <li>Stack sizes copied from an example and never measured (Section 2 above).</li>
+  </ol>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr tools for these practices on the STM32F769I-DISCO</span>
+  <ul>
+    <li><b>Priorities:</b> preemptible thread priorities 0 … <code>CONFIG_NUM_PREEMPT_PRIORITIES</code>−1 (lower number = more urgent); reserve cooperative (negative) priorities for short, non-preemptible work. Measure execution time with <code>k_cycle_get_32()</code> or <code>timing_counter_get()</code> (<code>CONFIG_TIMING_FUNCTIONS</code>).</li>
+    <li><b>Stacks:</b> <code>K_THREAD_STACK_DEFINE()</code> for each thread; <code>CONFIG_MAIN_STACK_SIZE</code> (default 1024), <code>CONFIG_ISR_STACK_SIZE</code> (default 2048), <code>CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE</code> (default 1024). <code>CONFIG_INIT_STACKS=y</code> paints stacks with <code>0xaa</code>; <code>CONFIG_THREAD_ANALYZER=y</code> reports per-thread usage; <code>k_thread_stack_space_get()</code> returns unused bytes at run time. <code>CONFIG_HW_STACK_PROTECTION=y</code> (MPU stack guard on this Cortex-M7) faults on overflow; <code>CONFIG_STACK_SENTINEL</code> is a software fallback.</li>
+    <li><b>Shared state:</b> <code>k_msgq</code> and <code>k_fifo</code> for ownership-based designs; <code>atomic_t</code> with <code>atomic_inc()</code>, <code>atomic_set_bit()</code>, <code>atomic_cas()</code>; <code>k_spinlock</code> for ISR-shared data. The STM32F7's data cache is managed with <code>sys_cache_data_flush_range()</code> / <code>sys_cache_data_invd_range()</code>, or by placing buffers in a non-cacheable region.</li>
+    <li><b>ISR safety:</b> the Zephyr API documentation marks ISR-callable functions as "isr-ok"; those that may block require <code>K_NO_WAIT</code> in interrupt context. <code>CONFIG_ASSERT=y</code> during development catches many illegal calls.</li>
+    <li><b>Checking the result:</b> <code>CONFIG_THREAD_RUNTIME_STATS</code> for CPU load per thread, and the kernel shell for thread states and stack usage.</li>
+  </ul>
+</div>
+
+<h2>Where to go next</h2>
+<p>This completes the theory. The tutorial series that follows applies each lesson on the STM32F769I-DISCO with Zephyr, starting with <code>01_binary_semaphores</code>. Return to the <a href="index.html">course home</a> for the full map.</p>
+
+<nav class="pager">
+  <a href="11_priority_inversion.html" rel="prev">← Priority inversion</a>
+  <a href="index.html" rel="next">Course home →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# Application options for 01_binary_semaphores.
+# Change them in prj.conf; no code edits are needed for the experiments.
+
+mainmenu "01_binary_semaphores"
+
+config APP_PROCESSING_MS
+	int "Time the handler thread spends on each event (ms)"
+	default 1000
+	help
+	  Simulated work per event. Events that arrive while the handler is
+	  busy pile up in the semaphore; a binary semaphore keeps only one.
+
+config APP_TAKE_TIMEOUT_MS
+	int "Timeout of the handler's k_sem_take() (ms)"
+	default 5000
+	help
+	  The handler prints a message each time it waits this long without
+	  an event, to show that k_sem_take() returns -EAGAIN on timeout.
+
+config APP_TIMER_PERIOD_MS
+	int "Period of an extra timer event source (ms, 0 = off)"
+	default 0
+	help
+	  When non-zero, a k_timer also gives the semaphore at this period.
+	  Its expiry function runs in interrupt context, like the button
+	  ISR, so it produces a repeatable stream of events without pressing
+	  the button.
+
+source "Kconfig.zephyr"

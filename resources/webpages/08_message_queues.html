@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 · Message Queues — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part II · Lesson 08 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Message queues</h1>
+<p class="lead">A message queue moves data and synchronises in one operation. Designs built from tasks that own their data and talk through queues have far fewer shared-state bugs than designs built from shared variables and locks.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Define a message queue and the blocking behaviour of send and receive.</li>
+    <li>Explain copy semantics and the alternative of passing pointers with ownership transfer.</li>
+    <li>Size a queue from the producer rate and the worst-case consumer delay.</li>
+    <li>Choose and implement a policy for a full queue, especially when the producer is an ISR.</li>
+    <li>Explain how message passing removes the need for locks on shared data.</li>
+  </ul>
+</div>
+
+<h2>The concept</h2>
+<div class="box definition">
+  <p><span class="term">Message queue:</span> a kernel-managed FIFO buffer with a fixed number of slots of fixed size. <b>Send</b> copies a message into a free slot, blocking (up to a timeout) if the queue is full. <b>Receive</b> copies the oldest message out, blocking (up to a timeout) if the queue is empty. Each operation wakes a task waiting on the opposite side.</p>
+</div>
+<figure>
+  <img src="images/message_queue.svg" alt="Ring buffer with six slots, three occupied; producer puts at the write index, consumer gets from the read index" width="860">
+  <figcaption>Figure 1 · The kernel allocates depth × message-size bytes once, at creation. No allocation happens at run time.</figcaption>
+</figure>
+<p>A queue is a counting semaphore that carries data: the number of messages is the count, and a receive is a take that also delivers a payload. That is why one queue replaces the common, fragile pattern of "shared variable + semaphore + mutex".</p>
+
+<h3>Copy versus reference</h3>
+<ul>
+  <li><b>By copy</b> (the default): the sender's data is copied into the queue, and out again to the receiver. The sender may reuse its variable immediately. Simple and safe; costs two copies per message, so keep messages small (a few to a few dozen bytes).</li>
+  <li><b>By reference</b>: the message is a pointer to a buffer (for example from a fixed-block memory pool). Only the pointer is copied. The rule that makes it safe is <strong>ownership transfer</strong>: after sending, the sender must not touch the buffer; the receiver now owns it and is responsible for returning it to the pool. Use this for large payloads such as packets or image lines.</li>
+</ul>
+
+<h3>The full-queue policy</h3>
+<p>Every design must answer: what happens when the producer is faster than the consumer for longer than the queue can absorb?</p>
+<table>
+  <thead><tr><th>Policy</th><th>How</th><th>Suits</th></tr></thead>
+  <tbody>
+    <tr><td>Block the producer</td><td>Send with a timeout or forever</td><td>Producer is a task, and back-pressure is acceptable</td></tr>
+    <tr><td>Drop the newest</td><td>Send with no wait; on failure count the drop</td><td>ISR producers, telemetry</td></tr>
+    <tr><td>Drop the oldest</td><td>Discard one message at the head, then send</td><td>"Latest value matters most" streams</td></tr>
+    <tr><td>Overwrite a one-slot queue</td><td>Depth 1, always replace</td><td>Publishing the current state, not a history</td></tr>
+  </tbody>
+</table>
+<p>An ISR cannot block, so an ISR producer always needs a non-blocking policy and a drop counter you can inspect in testing.</p>
+
+<h2>When to use a queue</h2>
+<ul>
+  <li>Passing samples, commands, events with parameters, or packet descriptors between tasks, or from an ISR to a task.</li>
+  <li>Decoupling rates: a bursty producer and a steady consumer.</li>
+  <li>The <b>gatekeeper</b> (or active object) pattern: one task owns a resource and receives requests through its queue. No other task touches the resource, so no lock is needed (<a href="10_mutual_exclusion_and_deadlock.html">Lesson 10</a> shows how this also removes a deadlock condition).</li>
+</ul>
+<h2>When not to use a queue</h2>
+<ul>
+  <li>For a pure signal without data: a semaphore, notification or event bit is lighter.</li>
+  <li>For large payloads by copy: the copying costs CPU and doubles the RAM. Pass references instead.</li>
+  <li>When the consumer needs only the latest value of something that changes faster than it reads: a depth-1 overwrite queue, or a protected variable, is clearer than a deep queue of stale values.</li>
+  <li>For request/response where the sender must wait for the answer: you need two queues (or a reply semaphore). A single queue does not return results.</li>
+</ul>
+
+<h2>Worked example: sizing a sensor queue</h2>
+<div class="box example">
+  <span class="box-title">1 kHz IMU samples into a fusion task</span>
+  <p>An IMU interrupt delivers a 12-byte sample (3 axes × 2 sensors × 16 bit) every 1 ms. The ISR sends each sample to the fusion task with no wait.</p>
+  <ol>
+    <li><b>Average throughput.</b> The fusion task takes 0.3 ms per sample, so on average it keeps up (30 % load).</li>
+    <li><b>Worst-case consumer delay.</b> Higher-priority work (a 5 ms radio burst and a 4 ms control update that can coincide) can keep the fusion task off the CPU for up to 9 ms. In 9 ms, 9 samples arrive.</li>
+    <li><b>Depth.</b> At least 9 messages, plus margin: choose 16. Memory: 16 × 12 = 192 bytes.</li>
+    <li><b>Policy.</b> The ISR uses no-wait sends and increments a drop counter on failure. A drop count above zero in testing means the delay analysis was wrong.</li>
+  </ol>
+  <p>The general rule: <code>depth ≥ arrival rate × longest time the consumer can be unavailable</code>, provided the consumer's average service rate exceeds the arrival rate. If it does not, no depth is enough.</p>
+</div>
+
+<h2>How it differs from the other primitives</h2>
+<table>
+  <thead><tr><th>Compared with</th><th>Difference</th></tr></thead>
+  <tbody>
+    <tr><td>Counting semaphore</td><td>Both count; a queue also carries a payload per unit and has a fixed capacity on the send side that can block.</td></tr>
+    <tr><td>Event group / notification</td><td>Those carry state bits or one word; a queue carries ordered, distinct messages, each consumed once.</td></tr>
+    <tr><td>Mutex + shared variable</td><td>Shared variable: everyone sees the latest value, with locking. Queue: each consumer receives each message once, with no shared state.</td></tr>
+  </tbody>
+</table>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Sending a pointer to a local (stack) variable.</b> By the time the receiver reads it, the sender's stack frame has been reused.</li>
+    <li><b>Touching a buffer after sending its pointer.</b> Ownership has moved; the sender and receiver now race on it.</li>
+    <li><b>Sizing by guesswork.</b> Too shallow drops data under load; too deep hides an overloaded consumer and adds latency. Size from rates and worst-case delays.</li>
+    <li><b>Ignoring send failures</b> in ISRs or no-wait sends. Count them.</li>
+    <li><b>A high-priority task blocking forever on send</b> to a slow, low-priority consumer. Its response time now depends on the consumer: priority inversion through a queue.</li>
+    <li><b>Several consumers on one queue expecting per-consumer ordering.</b> Each message goes to one receiver; which one depends on priority and timing.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr: <code>struct k_msgq</code> and relatives</span>
+  <ul>
+    <li><code>K_MSGQ_DEFINE(name, msg_size, max_msgs, align)</code> or <code>k_msgq_init()</code> with your own buffer. Messages are copied.</li>
+    <li><code>k_msgq_put(&amp;q, &amp;msg, timeout)</code> and <code>k_msgq_get(&amp;q, &amp;msg, timeout)</code> return 0, <code>-ENOMSG</code> (no wait, or the queue was purged) or <code>-EAGAIN</code> (timeout). Both are ISR-safe with <code>K_NO_WAIT</code>.</li>
+    <li><code>k_msgq_peek()</code> reads without removing, <code>k_msgq_purge()</code> empties the queue, <code>k_msgq_num_used_get()</code> / <code>k_msgq_num_free_get()</code> report fill level (useful to measure the worst case in tests).</li>
+    <li>For pointer passing: <code>k_fifo</code> / <code>k_lifo</code> link caller-provided items (the first word of each item is reserved for the kernel), combined with a <code>k_mem_slab</code> fixed-block pool. Other kernel objects for other shapes of data: <code>k_pipe</code> (byte streams), <code>k_mbox</code> (synchronous exchange), and the zbus subsystem (publish/subscribe).</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="07_event_groups_and_notifications.html" rel="prev">← Event groups and task notifications</a>
+  <a href="09_choosing_a_primitive.html" rel="next">Next: Choosing a primitive →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+</body>
+</html>

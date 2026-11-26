@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04 · Interrupts and Deferred Processing — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part I · Lesson 04 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Interrupts and deferred processing</h1>
+<p class="lead">Interrupts are how the outside world reaches the firmware. They outrank every task, so the way you split work between an ISR and a task decides the latency of the whole system.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Define interrupt latency and task response latency.</li>
+    <li>State the rules an ISR must follow in an RTOS, and why.</li>
+    <li>Explain how interrupt priorities relate to task priorities, and what kernel-aware and zero-latency interrupts are.</li>
+    <li>Describe deferred interrupt processing with a handler task and with a work queue, and choose between them.</li>
+    <li>Recognise which kernel calls are ISR-safe.</li>
+  </ul>
+</div>
+
+<h2>Interrupts in an RTOS</h2>
+<div class="box definition">
+  <p><span class="term">Interrupt latency:</span> the time from the hardware asserting an interrupt request to the first instruction of its ISR. It includes the time the CPU had interrupts masked when the request arrived.</p>
+  <p><span class="term">Task response latency:</span> the time from the interrupt request to the first instruction of the <em>task</em> that handles the event. It adds the ISR duration, the scheduler decision and the context switch, plus any time spent in higher-priority tasks or ISRs.</p>
+</div>
+<p>Interrupt priorities and task priorities are <strong>two separate scales</strong>. The interrupt controller (the NVIC on Cortex-M) arbitrates between interrupts; the RTOS scheduler arbitrates between tasks. Any ISR, even the lowest-priority one, preempts the highest-priority task.</p>
+<p>The kernel needs short critical sections in which it masks interrupts to update its own data structures. Those sections add directly to interrupt latency. Many Cortex-M ports mask only interrupts at or below a configured priority (using the <code>BASEPRI</code> register), which splits interrupts into two classes:</p>
+<ul>
+  <li><b>Kernel-aware interrupts</b> may call ISR-safe kernel functions. They are masked during kernel critical sections.</li>
+  <li><b>Zero-latency interrupts</b> are never masked by the kernel, so their latency is as low as the hardware allows. In exchange they <em>must not call any kernel function</em>: the kernel may be in the middle of updating the very structure the call would touch.</li>
+</ul>
+
+<h2>The rules for an ISR</h2>
+<ol>
+  <li><b>Never block.</b> An ISR has no TCB; the scheduler cannot suspend it. Only non-blocking kernel calls are allowed: give, send with no wait, set bits, submit work.</li>
+  <li><b>Never use a mutex.</b> A mutex has an owner task, and an ISR is not a task. Priority inheritance would have nobody to boost.</li>
+  <li><b>Be short.</b> While an ISR runs, every task and every lower-or-equal-priority interrupt waits.</li>
+  <li><b>Clear the interrupt source</b> before returning, or the interrupt fires again immediately.</li>
+  <li><b>Share data safely.</b> Data shared between an ISR and a task needs protection on the task side (briefly masking that interrupt, or using atomic operations or a lock-free queue). A mutex cannot protect against an ISR.</li>
+</ol>
+
+<h2>Deferred interrupt processing</h2>
+<div class="box definition">
+  <p><span class="term">Deferred interrupt processing</span> (top half / bottom half): the ISR performs only the time-critical part of the handling (acknowledge the device, capture volatile data) and signals a task, which performs the rest of the work at a thread priority chosen by the designer.</p>
+</div>
+<figure>
+  <img src="images/isr_deferred.svg" alt="Timeline: IRQ line, short ISR, handler thread doing the bulk of the work, application thread resuming afterwards" width="860">
+  <figcaption>Figure 1 · The ISR runs for microseconds; the processing runs in a thread that can block, call any API and be preempted.</figcaption>
+</figure>
+<p>Benefits: interrupt latency stays low for every other interrupt; the processing can use blocking APIs, mutexes and logging; and its urgency becomes a task priority you can reason about with the rest of the task set.</p>
+<p>There are two common forms:</p>
+<table>
+  <thead><tr><th></th><th>Dedicated handler task</th><th>Work queue</th></tr></thead>
+  <tbody>
+    <tr><td>Mechanism</td><td>A task blocks on a semaphore, queue or notification; the ISR signals it.</td><td>A kernel-provided thread runs submitted work items one at a time; the ISR submits an item.</td></tr>
+    <tr><td>Priority</td><td>Chosen per handler</td><td>One priority for all items in that queue</td></tr>
+    <tr><td>Memory cost</td><td>One stack per handler</td><td>One shared stack</td></tr>
+    <tr><td>Timing isolation</td><td>Good: handlers do not delay each other except by priority</td><td>Poor: a slow item delays every item behind it</td></tr>
+    <tr><td>Use for</td><td>Hard-deadline or high-rate handling</td><td>Occasional, short, non-critical follow-up work</td></tr>
+  </tbody>
+</table>
+<p>The signalling object between ISR and handler is the subject of Part II: a binary semaphore or task notification to say "something happened", a counting semaphore to count occurrences, a message queue to pass the data itself.</p>
+
+<h2>Worked example: a UART command line</h2>
+<div class="box example">
+  <span class="box-title">115200 baud, newline-terminated commands</span>
+  <p>At 115200 baud with 8N1 framing, one byte takes 10 bit times: <code>10 ÷ 115200 ≈ 86.8 µs</code>. A received byte must be read before the next one overwrites it (assuming a single-byte receive register, no FIFO).</p>
+  <ul>
+    <li><b>ISR:</b> read the data register (this also clears the flag), store the byte in a ring buffer. If the byte is a newline, signal the command task. Duration: well under 1 µs.</li>
+    <li><b>Command task</b> (medium priority): blocks on the signal; when woken, copies the line out of the ring buffer, parses it, and executes the command, which may take milliseconds, log to flash, or wait for a mutex.</li>
+  </ul>
+  <p>Had the parsing been done in the ISR, a 2 ms command would block every lower-or-equal-priority interrupt, and the UART itself, for 2 ms: about 23 byte times, so incoming bytes would be lost unless DMA or a FIFO covered the gap.</p>
+  <p>Note the choice of one signal per <em>line</em> rather than per <em>byte</em>: it wakes the task about 1/20th as often for typical commands, which saves context switches (Lesson 03).</p>
+</div>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Calling a blocking API in an ISR</b> (taking a semaphore with a timeout, locking a mutex, sleeping). Depending on the kernel this asserts, faults, or corrupts scheduler state.</li>
+    <li><b>Calling kernel functions from a zero-latency interrupt.</b> It works in testing and corrupts the kernel when the interrupt hits one of its critical sections.</li>
+    <li><b>Doing the processing in the ISR</b> because "it's faster". It is faster for that one event, and slower for everything else.</li>
+    <li><b>Protecting ISR-shared data with a mutex.</b> The ISR cannot take it, so nothing is protected. Use brief interrupt masking, atomics, or a queue.</li>
+    <li><b>Forgetting <code>volatile</code> or atomic access</b> for a flag written in an ISR and polled in a task: the compiler may keep it in a register and never see the change.</li>
+    <li><b>Heavy printing or logging from ISRs.</b> Formatted output is slow and is usually not ISR-safe.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr on the STM32F769I-DISCO</span>
+  <ul>
+    <li>Interrupts are wired with <code>IRQ_CONNECT()</code> (or by the device driver from devicetree). <code>k_is_in_isr()</code> tells code which context it runs in.</li>
+    <li>ISR-safe calls include <code>k_sem_give()</code>, <code>k_sem_take(…, K_NO_WAIT)</code>, <code>k_msgq_put(…, K_NO_WAIT)</code>, <code>k_event_post()</code>/<code>k_event_set()</code>, <code>k_work_submit()</code> and <code>k_poll_signal_raise()</code>. <code>k_mutex_lock()</code>/<code>k_mutex_unlock()</code> are not ISR-safe.</li>
+    <li>Work queues: the system work queue (<code>CONFIG_SYSTEM_WORKQUEUE_PRIORITY</code>, default −1, a cooperative priority; stack <code>CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE</code>, default 1024 bytes) or a dedicated one started with <code>k_work_queue_start()</code>. Delayed work: <code>k_work_schedule()</code> on a <code>struct k_work_delayable</code>.</li>
+    <li>On this Cortex-M7, <code>irq_lock()</code> masks kernel-aware interrupts via BASEPRI. <code>CONFIG_ZERO_LATENCY_IRQS=y</code> plus the <code>IRQ_ZERO_LATENCY</code> flag creates interrupts the kernel never masks. Such ISRs must not call kernel APIs.</li>
+    <li>The STM32F7 NVIC implements 4 priority bits (16 levels); Zephyr reserves part of that range for its own exceptions, so devicetree priorities are small numbers relative to what remains.</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="03_context_switching.html" rel="prev">← Context switching</a>
+  <a href="05_semaphores.html" rel="next">Next: Semaphores →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+</body>
+</html>

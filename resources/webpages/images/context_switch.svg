@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 470" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" font-size="13">
+  <title>Context switch on ARM Cortex-M using PendSV</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#30343f"/>
+    </marker>
+  </defs>
+  <rect width="860" height="470" fill="#ffffff"/>
+  <text x="430" y="28" text-anchor="middle" font-size="17" font-weight="700" fill="#1d232b">Context switch from Task A to Task B (Cortex-M, PendSV)</text>
+
+  <!-- step list -->
+  <g font-size="12.5" fill="#1d232b">
+    <g>
+      <circle cx="34" cy="68" r="12" fill="#1f6feb"/><text x="34" y="72" text-anchor="middle" fill="#fff" font-weight="700">1</text>
+      <text x="56" y="64" font-weight="700">Trigger</text>
+      <text x="56" y="80">SysTick or an ISR makes Task B ready; the kernel</text>
+      <text x="56" y="95">sets PendSV pending (lowest exception priority).</text>
+    </g>
+    <g>
+      <circle cx="34" cy="128" r="12" fill="#1f6feb"/><text x="34" y="132" text-anchor="middle" fill="#fff" font-weight="700">2</text>
+      <text x="56" y="124" font-weight="700">Hardware stacking (exception entry)</text>
+      <text x="56" y="140">CPU pushes R0–R3, R12, LR, PC, xPSR onto Task A's</text>
+      <text x="56" y="155">stack (PSP). +S0–S15, FPSCR if A used the FPU.</text>
+    </g>
+    <g>
+      <circle cx="34" cy="188" r="12" fill="#1f6feb"/><text x="34" y="192" text-anchor="middle" fill="#fff" font-weight="700">3</text>
+      <text x="56" y="184" font-weight="700">PendSV handler: save the rest</text>
+      <text x="56" y="200">Software pushes R4–R11 (+S16–S31 if FPU context)</text>
+      <text x="56" y="215">and stores PSP into Task A's control block.</text>
+    </g>
+    <g>
+      <circle cx="34" cy="248" r="12" fill="#1f6feb"/><text x="34" y="252" text-anchor="middle" fill="#fff" font-weight="700">4</text>
+      <text x="56" y="244" font-weight="700">Select next task</text>
+      <text x="56" y="260">Scheduler picks the highest-priority ready task (B)</text>
+      <text x="56" y="275">and loads its saved stack pointer from its control block.</text>
+    </g>
+    <g>
+      <circle cx="34" cy="308" r="12" fill="#1f6feb"/><text x="34" y="312" text-anchor="middle" fill="#fff" font-weight="700">5</text>
+      <text x="56" y="304" font-weight="700">Restore</text>
+      <text x="56" y="320">Software pops R4–R11 (+S16–S31) from Task B's stack,</text>
+      <text x="56" y="335">writes PSP, executes exception return.</text>
+    </g>
+    <g>
+      <circle cx="34" cy="368" r="12" fill="#1f6feb"/><text x="34" y="372" text-anchor="middle" fill="#fff" font-weight="700">6</text>
+      <text x="56" y="364" font-weight="700">Hardware unstacking</text>
+      <text x="56" y="380">CPU pops R0–R3, R12, LR, PC, xPSR from B's stack.</text>
+      <text x="56" y="395">Task B continues exactly where it was interrupted.</text>
+    </g>
+  </g>
+
+  <!-- stacks -->
+  <g font-size="12" text-anchor="middle">
+    <text x="560" y="62" font-weight="700" fill="#1d232b">Task A stack (after save)</text>
+    <rect x="490" y="72" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="560" y="89">xPSR</text>
+    <rect x="490" y="98" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="560" y="115">PC (return address)</text>
+    <rect x="490" y="124" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="560" y="141">LR</text>
+    <rect x="490" y="150" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="560" y="167">R12</text>
+    <rect x="490" y="176" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="560" y="193">R3 … R0</text>
+    <rect x="490" y="202" width="140" height="26" fill="#fff6dd" stroke="#9a6700"/><text x="560" y="219">R11 … R4</text>
+    <rect x="490" y="228" width="140" height="22" fill="#f0f2f5" stroke="#5b6573" stroke-dasharray="4 3"/><text x="560" y="243" fill="#5b6573">free stack</text>
+    <path d="M440,204 L488,204" stroke="#30343f" stroke-width="2" marker-end="url(#a)"/>
+    <text x="418" y="208" font-weight="700" fill="#1d232b">PSP</text>
+
+    <text x="760" y="62" font-weight="700" fill="#1d232b">Task B stack (before restore)</text>
+    <rect x="690" y="72" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="760" y="89">xPSR</text>
+    <rect x="690" y="98" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="760" y="115">PC</text>
+    <rect x="690" y="124" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="760" y="141">LR</text>
+    <rect x="690" y="150" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="760" y="167">R12</text>
+    <rect x="690" y="176" width="140" height="26" fill="#e6efff" stroke="#1f6feb"/><text x="760" y="193">R3 … R0</text>
+    <rect x="690" y="202" width="140" height="26" fill="#fff6dd" stroke="#9a6700"/><text x="760" y="219">R11 … R4</text>
+    <rect x="690" y="228" width="140" height="22" fill="#f0f2f5" stroke="#5b6573" stroke-dasharray="4 3"/><text x="760" y="243" fill="#5b6573">free stack</text>
+
+    <!-- TCBs -->
+    <rect x="490" y="290" width="140" height="52" rx="8" fill="#ffffff" stroke="#30343f" stroke-width="1.5"/>
+    <text x="560" y="311" font-weight="700">TCB of Task A</text>
+    <text x="560" y="330">saved SP ← PSP</text>
+    <rect x="690" y="290" width="140" height="52" rx="8" fill="#ffffff" stroke="#30343f" stroke-width="1.5"/>
+    <text x="760" y="311" font-weight="700">TCB of Task B</text>
+    <text x="760" y="330">saved SP → PSP</text>
+    <path d="M560,288 L560,252" stroke="#30343f" stroke-width="1.5" marker-end="url(#a)"/>
+    <path d="M760,252 L760,288" stroke="#30343f" stroke-width="1.5" marker-end="url(#a)"/>
+  </g>
+
+  <g font-size="12" fill="#1d232b">
+    <rect x="490" y="362" width="14" height="14" fill="#e6efff" stroke="#1f6feb"/><text x="510" y="374">saved by hardware on exception entry</text>
+    <rect x="490" y="384" width="14" height="14" fill="#fff6dd" stroke="#9a6700"/><text x="510" y="396">saved by the kernel's PendSV handler</text>
+  </g>
+  <text x="430" y="438" text-anchor="middle" font-size="12" fill="#5b6573">Stacks grow downward (higher addresses at the top). The whole context of a task is its registers plus its stack;</text>
+  <text x="430" y="455" text-anchor="middle" font-size="12" fill="#5b6573">the task control block (TCB) only needs to remember where that stack ends.</text>
+</svg>

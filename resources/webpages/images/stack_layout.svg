@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 440" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" font-size="13">
+  <title>What a task stack must hold</title>
+  <rect width="860" height="440" fill="#ffffff"/>
+  <text x="430" y="28" text-anchor="middle" font-size="17" font-weight="700" fill="#1d232b">What one task's stack must hold (Cortex-M, interrupts on a separate stack)</text>
+
+  <text x="200" y="58" text-anchor="middle" font-size="12" fill="#5b6573">high address (stack start)</text>
+  <g font-size="12.5" text-anchor="middle" fill="#1d232b">
+    <rect x="80" y="66" width="240" height="40" fill="#e6efff" stroke="#1f6feb"/>
+    <text x="200" y="91">entry function frame</text>
+    <rect x="80" y="106" width="240" height="96" fill="#e6efff" stroke="#1f6feb"/>
+    <text x="200" y="142">deepest call chain:</text>
+    <text x="200" y="160">locals, arguments, saved registers</text>
+    <text x="200" y="178">of every nested call (incl. printf, libs)</text>
+    <rect x="80" y="202" width="240" height="44" fill="#fff6dd" stroke="#9a6700"/>
+    <text x="200" y="221">exception frame: 32 B</text>
+    <text x="200" y="237">(104 B with FPU state)</text>
+    <rect x="80" y="246" width="240" height="44" fill="#fff6dd" stroke="#9a6700"/>
+    <text x="200" y="265">context save area: R4–R11 32 B</text>
+    <text x="200" y="281">(+64 B for S16–S31)</text>
+    <rect x="80" y="290" width="240" height="40" fill="#e6f4ea" stroke="#1a7f37"/>
+    <text x="200" y="315">safety margin</text>
+    <rect x="80" y="330" width="240" height="36" fill="#f0f2f5" stroke="#5b6573" stroke-dasharray="4 3"/>
+    <text x="200" y="353" fill="#5b6573">unused (still holds fill pattern)</text>
+    <rect x="80" y="366" width="240" height="26" fill="#fde8ec" stroke="#c4314b"/>
+    <text x="200" y="384" fill="#c4314b" font-weight="700">guard region (MPU)</text>
+  </g>
+  <text x="200" y="410" text-anchor="middle" font-size="12" fill="#5b6573">low address · stack grows downward ↓</text>
+
+  <path d="M330,202 L344,202 L344,330 L330,330" fill="none" stroke="#30343f" stroke-width="1.5"/>
+  <text x="352" y="262" font-size="12" fill="#1d232b">measured</text>
+  <text x="352" y="277" font-size="12" fill="#1d232b">high-water mark</text>
+  <text x="352" y="292" font-size="12" fill="#1d232b">ends here</text>
+
+  <g font-size="12.5" fill="#1d232b">
+    <rect x="470" y="60" width="374" height="350" rx="10" fill="#f7f8fa" stroke="#d9dee5"/>
+    <text x="490" y="88" font-weight="700" font-size="14">Sizing procedure</text>
+    <text x="490" y="116" font-weight="700">1. Estimate</text>
+    <text x="490" y="134">Per-function stack usage from the compiler</text>
+    <text x="490" y="152">(-fstack-usage) along the deepest call path,</text>
+    <text x="490" y="170">plus the context and exception frame areas.</text>
+    <text x="490" y="198" font-weight="700">2. Measure</text>
+    <text x="490" y="216">Fill the stack with a known pattern at start-up,</text>
+    <text x="490" y="234">run the worst-case scenario, then count the</text>
+    <text x="490" y="252">untouched bytes (the high-water mark).</text>
+    <text x="490" y="280" font-weight="700">3. Add margin and protect</text>
+    <text x="490" y="298">Keep a margin above the measured peak (a common</text>
+    <text x="490" y="316">rule: 20–30 %). Enable a hardware guard so an</text>
+    <text x="490" y="334">overflow faults immediately instead of corrupting</text>
+    <text x="490" y="352">the neighbouring memory.</text>
+    <text x="490" y="384" fill="#5b6573">ISR nesting uses the separate interrupt stack (MSP),</text>
+    <text x="490" y="400" fill="#5b6573">so it is sized once, not added to every task.</text>
+  </g>
+</svg>

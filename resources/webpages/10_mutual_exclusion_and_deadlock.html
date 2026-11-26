@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10 · Mutual Exclusion and Deadlock — RTOS Synchronization Primitives</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu-toggle" aria-label="Toggle lesson list">☰</button>
+  <a href="index.html" class="brand">RTOS Synchronization Primitives</a>
+  <span class="crumb">Part III · Lesson 10 of 12</span>
+</header>
+<div class="layout">
+<nav class="sidebar" aria-label="Lessons">
+  <ol><li><a href="index.html">Course home</a></li></ol>
+  <h4>Part I · Foundations</h4>
+  <ol>
+    <li><a href="01_tasks_and_states.html"><span class="num">01</span>Tasks and task states</a></li>
+    <li><a href="02_scheduling.html"><span class="num">02</span>Scheduling</a></li>
+    <li><a href="03_context_switching.html"><span class="num">03</span>Context switching</a></li>
+    <li><a href="04_interrupts_and_deferred_processing.html"><span class="num">04</span>Interrupts and deferred processing</a></li>
+  </ol>
+  <h4>Part II · Communication &amp; synchronization</h4>
+  <ol>
+    <li><a href="05_semaphores.html"><span class="num">05</span>Semaphores</a></li>
+    <li><a href="06_mutexes.html"><span class="num">06</span>Mutexes</a></li>
+    <li><a href="07_event_groups_and_notifications.html"><span class="num">07</span>Event groups and task notifications</a></li>
+    <li><a href="08_message_queues.html"><span class="num">08</span>Message queues</a></li>
+    <li><a href="09_choosing_a_primitive.html"><span class="num">09</span>Choosing a primitive</a></li>
+  </ol>
+  <h4>Part III · Hazards</h4>
+  <ol>
+    <li><a href="10_mutual_exclusion_and_deadlock.html"><span class="num">10</span>Mutual exclusion and deadlock</a></li>
+    <li><a href="11_priority_inversion.html"><span class="num">11</span>Priority inversion</a></li>
+  </ol>
+  <h4>Part IV · Design practice</h4>
+  <ol>
+    <li><a href="12_design_guidance.html"><span class="num">12</span>Design guidance and common mistakes</a></li>
+  </ol>
+</nav>
+<main class="content">
+<h1>Mutual exclusion and deadlock</h1>
+<p class="lead">Locks fix race conditions and introduce a new failure: tasks that wait for each other forever. Deadlock has a precise set of preconditions, and that precision is what lets you design it out instead of testing for it.</p>
+
+<div class="box objectives">
+  <span class="box-title">Learning objectives</span>
+  <ul>
+    <li>Define a race condition and the requirements a correct mutual-exclusion mechanism must meet.</li>
+    <li>Define deadlock and state the four Coffman conditions precisely.</li>
+    <li>Read a resource-allocation graph and recognise a deadlock cycle.</li>
+    <li>Apply one practical firmware technique to break each Coffman condition.</li>
+    <li>Distinguish deadlock from livelock and starvation, and recognise deadlocks that involve queues and semaphores rather than mutexes.</li>
+  </ul>
+</div>
+
+<h2>Mutual exclusion</h2>
+<div class="box definition">
+  <p><span class="term">Race condition:</span> a defect in which the result of a computation depends on the relative timing or interleaving of concurrent contexts accessing shared state, at least one of them writing.</p>
+  <p><span class="term">Mutual exclusion:</span> the guarantee that at most one context executes a given critical section at any time.</p>
+</div>
+<p>A correct mutual-exclusion mechanism must satisfy three requirements:</p>
+<ol>
+  <li><b>Mutual exclusion</b>: no two contexts are in the critical section at the same time.</li>
+  <li><b>Progress</b>: if the section is free and some contexts want to enter, one of them enters; the decision is not postponed indefinitely.</li>
+  <li><b>Bounded waiting</b>: once a context has asked to enter, there is a bound on how many times others may enter before it does.</li>
+</ol>
+<p>A kernel mutex satisfies all three between tasks, provided every access uses it. Deadlock is a violation of <em>progress</em> that appears when tasks hold more than one lock, or wait for something while holding one.</p>
+
+<h2>Deadlock</h2>
+<div class="box definition">
+  <p><span class="term">Deadlock:</span> a state in which each task of a set is blocked waiting for an event that only another task of the same set can cause. None of them can ever proceed.</p>
+</div>
+<figure>
+  <img src="images/deadlock_cycle.svg" alt="Resource-allocation graph: Task A holds M1 and waits for M2, Task B holds M2 and waits for M1, forming a cycle; panel listing the four Coffman conditions" width="860">
+  <figcaption>Figure 1 · The classic two-lock deadlock. An arrow from a resource to a task means "held by"; from a task to a resource, "waits for".</figcaption>
+</figure>
+
+<h3>The four Coffman conditions</h3>
+<p>Coffman, Elphick and Shoshani (1971) showed that a deadlock can occur only if all four of the following hold at the same time:</p>
+<table>
+  <thead><tr><th>Condition</th><th>Precise statement</th></tr></thead>
+  <tbody>
+    <tr><td><b>1. Mutual exclusion</b></td><td>At least one resource is non-shareable: only one task can use it at a time.</td></tr>
+    <tr><td><b>2. Hold and wait</b></td><td>A task holds at least one resource while waiting to acquire another resource held by a different task.</td></tr>
+    <tr><td><b>3. No preemption</b></td><td>A resource cannot be taken away from the task holding it; it is released only voluntarily by that task.</td></tr>
+    <tr><td><b>4. Circular wait</b></td><td>There is a closed chain of tasks T<sub>1</sub>, T<sub>2</sub>, …, T<sub>n</sub> in which each T<sub>i</sub> waits for a resource held by T<sub>i+1</sub>, and T<sub>n</sub> waits for a resource held by T<sub>1</sub>.</td></tr>
+  </tbody>
+</table>
+<p>The conditions are <strong>necessary</strong>: remove any one, and deadlock is impossible. For resources with a single instance (a mutex is one), a cycle in the resource-allocation graph is also <strong>sufficient</strong>: if the cycle exists, the tasks in it are deadlocked.</p>
+<p>A kernel mutex always satisfies conditions 1 and 3 by design: it is exclusive, and the kernel never takes it away from its owner. So in practice, firmware deadlocks are prevented by attacking conditions 2 and 4, or by changing the design so a lock is not needed at all.</p>
+
+<h2>Breaking each condition in firmware</h2>
+<table>
+  <thead><tr><th>Condition</th><th>Technique</th><th>Cost</th></tr></thead>
+  <tbody>
+    <tr><td>Mutual exclusion</td><td>Make the resource unnecessary to lock: give it a <b>single owner</b> (a gatekeeper task that receives requests through a queue), make the data read-only after initialisation, use atomic operations for single words, or use double buffering so readers and the writer never touch the same buffer.</td><td>Extra task and queue latency (gatekeeper); more RAM (double buffering).</td></tr>
+    <tr><td>Hold and wait</td><td><b>Never block while holding a lock</b>: release before waiting on a queue or semaphore. When several locks are needed, <b>acquire them all at once</b> (try each; if any fails, release all and retry), or protect the group with one lock.</td><td>Code restructuring; coarser locks can reduce concurrency.</td></tr>
+    <tr><td>No preemption</td><td>Take the second lock with a <b>timeout</b>; on timeout, release every lock held, back off for a randomised or priority-dependent delay, and retry. The task gives up its resource, which emulates preemption.</td><td>Wasted work; possible livelock if tasks retry in lockstep; must be able to undo partial work.</td></tr>
+    <tr><td>Circular wait</td><td>Define a <b>global lock order</b> (assign every lock a level) and acquire locks only in increasing order. A cycle then cannot form. Document the order and check it with assertions in debug builds.</td><td>Discipline; occasionally a lock must be taken earlier than needed.</td></tr>
+  </tbody>
+</table>
+
+<h2>Deadlock visualization</h2>
+<div class="demo" data-demo="deadlock">
+  <p class="demo-title">Interactive: build a deadlock, then break each condition</p>
+  <div class="demo-controls">
+    <label>Scenario
+      <select data-opt="scenario">
+        <option value="deadlock">All four conditions → deadlock</option>
+        <option value="ordering">Break circular wait (lock ordering)</option>
+        <option value="holdwait">Break hold and wait (all or nothing)</option>
+        <option value="preempt">Break no preemption (timeout and back off)</option>
+        <option value="gatekeeper">Break mutual exclusion (gatekeeper task)</option>
+      </select>
+    </label>
+    <button data-act="prev">◀ Step</button>
+    <button class="primary" data-act="play">Play</button>
+    <button data-act="next">Step ▶</button>
+    <span class="dl-verdict badge neutral">Running</span>
+  </div>
+  <div class="dl-wrap">
+    <svg viewBox="0 0 480 270" role="img" aria-label="Resource allocation graph"></svg>
+    <div>
+      <ul class="conds"></ul>
+      <div class="legend">
+        <span style="--sw: var(--ok)">held by</span>
+        <span style="--sw: var(--bad)">waits for (dashed)</span>
+        <span style="--sw: var(--accent)">message (dotted)</span>
+      </div>
+    </div>
+  </div>
+  <div class="dl-step"></div>
+</div>
+
+<h2>Worked example: the file system and the SPI bus</h2>
+<div class="box example">
+  <span class="box-title">A deadlock that passed every bench test</span>
+  <p>An SPI bus is shared by an external flash (holding a file system) and an LCD.</p>
+  <ul>
+    <li><b>Logger task</b>: locks the <em>file-system</em> mutex, opens a file, then the flash driver locks the <em>SPI</em> mutex to write sectors.</li>
+    <li><b>Display task</b>: locks the <em>SPI</em> mutex to stream a frame and, halfway through, needs a font glyph, so it reads it from the file system: lock <em>file-system</em> mutex.</li>
+  </ul>
+  <p>Order: Logger FS → SPI; Display SPI → FS. If the display task is preempted while holding SPI, just as the logger takes FS, both block on their second lock. All four conditions hold. On the bench the window is microseconds wide and never hit; in the field it happens once a week.</p>
+  <p><b>Fixes, one per condition:</b></p>
+  <ul>
+    <li><em>Circular wait:</em> fixed order FS → SPI for everyone. The display task loads the glyph (FS, then SPI inside the flash driver, then releases both) before locking SPI for the frame.</li>
+    <li><em>Hold and wait:</em> the display task releases SPI before reading the glyph and locks it again afterwards.</li>
+    <li><em>No preemption:</em> the display task takes FS with a timeout; on timeout it releases SPI, logs the event and retries the frame.</li>
+    <li><em>Mutual exclusion:</em> an SPI gatekeeper task performs all SPI transactions from a request queue; neither task ever holds the SPI lock.</li>
+  </ul>
+  <p>The first fix is the cheapest and the one to prefer. The last is the most robust as the system grows.</p>
+</div>
+
+<h2>Related failures</h2>
+<ul>
+  <li><b>Self-deadlock</b>: a task locks a non-recursive mutex it already owns, or takes a semaphore that only it would give.</li>
+  <li><b>Deadlock without mutexes</b>: Task A blocks sending to B's full queue while B blocks sending to A's full queue; or A holds a mutex and waits on a semaphore that only B gives, while B waits for the mutex. Any blocking wait is a "waits for" edge, not only lock calls.</li>
+  <li><b>Livelock</b>: tasks are not blocked but make no progress, for example two tasks that time out, back off and retry in perfect lockstep forever.</li>
+  <li><b>Starvation</b>: a task is never granted a resource because others always win, for example a low-priority task that never gets a heavily contended mutex. The system progresses, but not for that task.</li>
+</ul>
+<p>Two other strategies exist in the literature. <b>Avoidance</b> (for example the Banker's algorithm) checks each request against a model of future needs; it is rarely practical in firmware. <b>Detection and recovery</b> is practical: lock timeouts that log an error, and a watchdog that resets the system if a task stops reporting. Use it as a safety net, not as the design.</p>
+
+<h2>Common mistakes</h2>
+<div class="box mistakes">
+  <ul>
+    <li><b>Calling unknown code while holding a lock</b>: callbacks, logging, or library functions that take their own locks create orderings you cannot see.</li>
+    <li><b>Waiting forever on every lock.</b> An infinite wait turns a design error into a silent hang. Bounded waits that report failure make deadlocks visible in testing.</li>
+    <li><b>Relying on testing to find deadlocks.</b> The window can be a few instructions wide. Prove the absence by design: lock order or no hold-and-wait.</li>
+    <li><b>Fixing a deadlock by adding a delay.</b> It only makes the window smaller.</li>
+    <li><b>Ignoring queues and semaphores</b> when analysing for cycles. Any blocking wait counts.</li>
+  </ul>
+</div>
+
+<h2>What this becomes in Zephyr</h2>
+<div class="box zephyr">
+  <span class="box-title">Zephyr on the STM32F769I-DISCO</span>
+  <ul>
+    <li>The kernel does not detect deadlocks. Use <code>k_mutex_lock(&amp;m, K_MSEC(n))</code> and treat <code>-EAGAIN</code> as a design error to log, or as the trigger for the release-and-retry pattern.</li>
+    <li><code>k_mutex</code> is recursive, so a thread re-locking its own mutex does not self-deadlock. A <code>k_sem</code> used as a lock would.</li>
+    <li>Diagnosing a hang: <code>CONFIG_KERNEL_SHELL</code> provides shell commands that list threads with their state (pending threads show what they wait on). <code>CONFIG_THREAD_NAME=y</code> makes the list readable.</li>
+    <li>Recovery net: the task watchdog subsystem (<code>CONFIG_TASK_WDT</code>, each thread must feed its own channel) on top of the STM32 independent watchdog (IWDG) via the watchdog driver API.</li>
+    <li>Gatekeeper designs use a <code>k_msgq</code> as the request queue and a dedicated thread as the owner of the peripheral.</li>
+  </ul>
+</div>
+
+<nav class="pager">
+  <a href="09_choosing_a_primitive.html" rel="prev">← Choosing a primitive</a>
+  <a href="11_priority_inversion.html" rel="next">Next: Priority inversion →</a>
+</nav>
+</main>
+</div>
+<script src="js/site.js"></script>
+<script src="js/deadlock_demo.js"></script>
+</body>
+</html>

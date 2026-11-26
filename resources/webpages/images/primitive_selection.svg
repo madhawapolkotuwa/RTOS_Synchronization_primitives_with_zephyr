@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 560" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" font-size="13">
+  <title>Choosing a synchronization primitive</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#30343f"/></marker>
+  </defs>
+  <rect width="860" height="560" fill="#ffffff"/>
+  <text x="430" y="28" text-anchor="middle" font-size="17" font-weight="700" fill="#1d232b">Choosing a primitive: ask these questions in order</text>
+
+  <!-- questions -->
+  <g font-size="13" text-anchor="middle" fill="#1d232b">
+    <rect x="60" y="52" width="440" height="52" rx="10" fill="#e6efff" stroke="#1f6feb" stroke-width="1.5"/>
+    <text x="280" y="74" font-weight="700">1. Must data travel from one context to another?</text>
+    <text x="280" y="92" font-size="12" fill="#5b6573">(sensor samples, commands, packets)</text>
+
+    <rect x="60" y="148" width="440" height="52" rx="10" fill="#e6efff" stroke="#1f6feb" stroke-width="1.5"/>
+    <text x="280" y="170" font-weight="700">2. Must a shared resource be accessed by one task at a time?</text>
+    <text x="280" y="188" font-size="12" fill="#5b6573">(peripheral, data structure, non-reentrant driver)</text>
+
+    <rect x="60" y="244" width="440" height="52" rx="10" fill="#e6efff" stroke="#1f6feb" stroke-width="1.5"/>
+    <text x="280" y="266" font-weight="700">3. Wait on a combination of conditions, or wake several tasks?</text>
+    <text x="280" y="284" font-size="12" fill="#5b6573">(all subsystems initialised, any of several events)</text>
+
+    <rect x="60" y="340" width="440" height="52" rx="10" fill="#e6efff" stroke="#1f6feb" stroke-width="1.5"/>
+    <text x="280" y="362" font-weight="700">4. Must each occurrence be counted, or N units managed?</text>
+    <text x="280" y="380" font-size="12" fill="#5b6573">(bursty interrupts, pool of identical buffers)</text>
+
+    <rect x="60" y="436" width="440" height="52" rx="10" fill="#e6efff" stroke="#1f6feb" stroke-width="1.5"/>
+    <text x="280" y="458" font-weight="700">5. Is the signal for exactly one, known task?</text>
+    <text x="280" y="476" font-size="12" fill="#5b6573">(ISR wakes its own driver task)</text>
+  </g>
+
+  <!-- answers -->
+  <g font-size="13" fill="#1d232b">
+    <rect x="590" y="52" width="250" height="52" rx="10" fill="#e6f4ea" stroke="#1a7f37" stroke-width="1.5"/>
+    <text x="715" y="74" text-anchor="middle" font-weight="700">Message queue</text>
+    <text x="715" y="92" text-anchor="middle" font-size="12">data and synchronisation in one</text>
+    <rect x="590" y="148" width="250" height="52" rx="10" fill="#e6f4ea" stroke="#1a7f37" stroke-width="1.5"/>
+    <text x="715" y="170" text-anchor="middle" font-weight="700">Mutex</text>
+    <text x="715" y="188" text-anchor="middle" font-size="12">owner + priority inheritance</text>
+    <rect x="590" y="244" width="250" height="52" rx="10" fill="#e6f4ea" stroke="#1a7f37" stroke-width="1.5"/>
+    <text x="715" y="266" text-anchor="middle" font-weight="700">Event group</text>
+    <text x="715" y="284" text-anchor="middle" font-size="12">AND / OR wait, broadcast</text>
+    <rect x="590" y="340" width="250" height="52" rx="10" fill="#e6f4ea" stroke="#1a7f37" stroke-width="1.5"/>
+    <text x="715" y="362" text-anchor="middle" font-weight="700">Counting semaphore</text>
+    <text x="715" y="380" text-anchor="middle" font-size="12">count of events or free units</text>
+    <rect x="590" y="436" width="250" height="52" rx="10" fill="#e6f4ea" stroke="#1a7f37" stroke-width="1.5"/>
+    <text x="715" y="458" text-anchor="middle" font-weight="700">Task notification</text>
+    <text x="715" y="476" text-anchor="middle" font-size="12">lightest one-to-one signal</text>
+    <rect x="160" y="512" width="240" height="40" rx="10" fill="#e6f4ea" stroke="#1a7f37" stroke-width="1.5"/>
+    <text x="280" y="537" text-anchor="middle" font-weight="700">Binary semaphore</text>
+  </g>
+
+  <!-- arrows yes -->
+  <g stroke="#30343f" stroke-width="2" fill="none" marker-end="url(#a)">
+    <path d="M500,78 L588,78"/><path d="M500,174 L588,174"/><path d="M500,270 L588,270"/>
+    <path d="M500,366 L588,366"/><path d="M500,462 L588,462"/>
+    <path d="M280,104 L280,146"/><path d="M280,200 L280,242"/><path d="M280,296 L280,338"/>
+    <path d="M280,392 L280,434"/><path d="M280,488 L280,510"/>
+  </g>
+  <g font-size="12" font-weight="700">
+    <text x="544" y="72" text-anchor="middle" fill="#1a7f37">yes</text><text x="544" y="168" text-anchor="middle" fill="#1a7f37">yes</text>
+    <text x="544" y="264" text-anchor="middle" fill="#1a7f37">yes</text><text x="544" y="360" text-anchor="middle" fill="#1a7f37">yes</text>
+    <text x="544" y="456" text-anchor="middle" fill="#1a7f37">yes</text>
+    <text x="290" y="130" fill="#c4314b">no</text><text x="290" y="226" fill="#c4314b">no</text>
+    <text x="290" y="322" fill="#c4314b">no</text><text x="290" y="418" fill="#c4314b">no</text>
+    <text x="290" y="504" fill="#c4314b">no</text>
+  </g>
+  <text x="430" y="537" font-size="11.5" fill="#5b6573">If no notification mechanism exists, a binary semaphore does</text>
+  <text x="430" y="552" font-size="11.5" fill="#5b6573">the same job. Never use a semaphore where a mutex belongs.</text>
+</svg>

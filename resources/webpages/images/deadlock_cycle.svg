@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 340" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" font-size="13">
+  <title>Deadlock: resource allocation graph with a cycle</title>
+  <defs>
+    <marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1a7f37"/></marker>
+    <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c4314b"/></marker>
+  </defs>
+  <rect width="860" height="340" fill="#ffffff"/>
+  <text x="430" y="26" text-anchor="middle" font-size="17" font-weight="700" fill="#1d232b">Deadlock: every task in the cycle waits for a resource held by the next</text>
+
+  <!-- edges -->
+  <line x1="330" y1="80" x2="132" y2="80" stroke="#1a7f37" stroke-width="3" marker-end="url(#h)"/>
+  <text x="230" y="70" text-anchor="middle" font-size="12" font-weight="700" fill="#1a7f37">held by</text>
+  <line x1="100" y1="114" x2="100" y2="206" stroke="#c4314b" stroke-width="3" stroke-dasharray="7 5" marker-end="url(#w)"/>
+  <text x="108" y="166" font-size="12" font-weight="700" fill="#c4314b">waits for</text>
+  <line x1="132" y1="240" x2="326" y2="240" stroke="#1a7f37" stroke-width="3" marker-end="url(#h)"/>
+  <text x="230" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="#1a7f37">held by</text>
+  <line x1="360" y1="206" x2="360" y2="106" stroke="#c4314b" stroke-width="3" stroke-dasharray="7 5" marker-end="url(#w)"/>
+  <text x="368" y="160" font-size="12" font-weight="700" fill="#c4314b">waits for</text>
+
+  <!-- nodes -->
+  <circle cx="100" cy="80" r="32" fill="#fde8ec" stroke="#c4314b" stroke-width="2"/>
+  <text x="100" y="85" text-anchor="middle" font-weight="700">Task A</text>
+  <circle cx="360" cy="240" r="32" fill="#fde8ec" stroke="#c4314b" stroke-width="2"/>
+  <text x="360" y="245" text-anchor="middle" font-weight="700">Task B</text>
+  <rect x="330" y="58" width="60" height="44" rx="6" fill="#ffffff" stroke="#30343f" stroke-width="2"/>
+  <text x="360" y="85" text-anchor="middle" font-weight="700">M1</text>
+  <rect x="70" y="210" width="60" height="44" rx="6" fill="#ffffff" stroke="#30343f" stroke-width="2"/>
+  <text x="100" y="237" text-anchor="middle" font-weight="700">M2</text>
+  <text x="230" y="300" text-anchor="middle" font-size="12" fill="#5b6573">Cycle: A → M2 → B → M1 → A</text>
+
+  <!-- conditions -->
+  <rect x="460" y="48" width="384" height="270" rx="10" fill="#f7f8fa" stroke="#d9dee5"/>
+  <text x="652" y="74" text-anchor="middle" font-weight="700" font-size="14">Coffman conditions: all four are required</text>
+  <g font-size="12.5" fill="#1d232b">
+    <text x="476" y="104" font-weight="700">1. Mutual exclusion</text>
+    <text x="476" y="121">A resource can be held by only one task at a time.</text>
+    <text x="476" y="152" font-weight="700">2. Hold and wait</text>
+    <text x="476" y="169">A task holds one resource while waiting for another.</text>
+    <text x="476" y="200" font-weight="700">3. No preemption</text>
+    <text x="476" y="217">A resource is released only voluntarily by its holder.</text>
+    <text x="476" y="248" font-weight="700">4. Circular wait</text>
+    <text x="476" y="265">A closed chain of tasks exists, each waiting for a</text>
+    <text x="476" y="282">resource held by the next task in the chain.</text>
+    <text x="476" y="306" fill="#1a7f37" font-weight="700">Remove any one condition and deadlock is impossible.</text>
+  </g>
+</svg>
