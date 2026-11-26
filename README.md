@@ -2,7 +2,7 @@
 
 This is the theory course for a tutorial series on real-time operating system concepts. It covers what an engineer needs before designing multi-threaded firmware: how tasks are scheduled, how they communicate and synchronise, what goes wrong (deadlock, priority inversion), and how to design so it doesn't.
 
-The concepts are platform-neutral. Each lesson ends with a short **"What this becomes in Zephyr"** note naming the equivalent API on the **STM32F769I-DISCO** board (STM32F769NI, single Arm Cortex-M7 at 216 MHz, double-precision FPU). The hands-on tutorials that apply each lesson come later, in the numbered sub-folders of this project.
+The concepts are platform-neutral. Each lesson ends with a short **"What this becomes in [Zephyr](https://www.zephyrproject.org/)"** note naming the equivalent API on the **[STM32F769I-DISCO](https://www.st.com/en/evaluation-tools/32f769idiscovery.html)** board (STM32F769NI, single Arm Cortex-M7 at 216 MHz, double-precision FPU). The hands-on tutorials that apply each lesson come later, in the numbered sub-folders of this project.
 
 **Start here:** open [`resources/webpages/index.html`](resources/webpages/index.html) in a web browser. The site works offline from the file system and needs no server, build step or external library. Or check it online as [GitHub page](https://madhawapolkotuwa.github.io/RTOS_synchronization_primitives_with_zephyr/) 
 
