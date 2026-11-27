@@ -1,0 +1,100 @@
+# Application options for 07_deadlock.
+# Change them in prj.conf; no code edits are needed for the experiments.
+
+mainmenu "07_deadlock"
+
+choice APP_FIX
+	prompt "How the display task avoids the deadlock"
+	default APP_FIX_NONE
+
+config APP_FIX_NONE
+	bool "Part A: no fix. Display locks SPI then FS, logger FS then SPI"
+
+config APP_FIX_LOCK_ORDER
+	bool "Part B1: one global lock order, FS before SPI (breaks circular wait)"
+
+config APP_FIX_TIMEOUT
+	bool "Part B2: FS with a timeout; on timeout release SPI, back off, retry (breaks no preemption)"
+
+config APP_FIX_GATEKEEPER
+	bool "Part B3: an SPI gatekeeper thread owns the bus (breaks mutual exclusion on SPI)"
+
+endchoice
+
+config APP_CHECK_LOCK_ORDER
+	bool "Assert that every thread takes locks in increasing level (FS 1, SPI 2)"
+	default y if APP_FIX_LOCK_ORDER
+	help
+	  Experiment A5 turns it on without the fix: the assertion fires at
+	  the first frame, long before a deadlock would ever happen.
+
+config APP_REPORT_PERIOD_MS
+	int "Period of the statistics report printed by main (ms)"
+	default 2000
+
+config APP_DEBOUNCE_MS
+	int "Ignore button edges closer than this to the last accepted one (ms, 0 = off)"
+	default 50
+
+# --- Timing of the two tasks ---
+
+config APP_DISPLAY_PERIOD_MS
+	int "The display task draws a frame every ... ms"
+	default 50
+	range 20 10000
+
+config APP_HALF_FRAME_MS
+	int "Time to stream half a frame over SPI (ms)"
+	default 5
+	range 1 1000
+
+config APP_GLYPH_MS
+	int "Time to read a font glyph from the file system (ms)"
+	default 1
+	range 1 1000
+
+config APP_LOGGER_PERIOD_MS
+	int "The logger task writes a log record every ... ms"
+	default 100
+	range 20 10000
+
+config APP_LOGGER_OFFSET_MS
+	int "First log write this long after start (ms)"
+	default 25
+	help
+	  25 puts every scheduled write halfway between two frames: the two
+	  tasks never overlap, and the deadlock never happens on its own.
+	  Experiment A3 sets 2, so that every write collides with a frame.
+
+config APP_OPEN_MS
+	int "Time the logger spends opening the file, holding only FS (ms)"
+	default 2
+	range 1 1000
+
+config APP_WRITE_MS
+	int "Time to write the record to the flash over SPI (ms)"
+	default 2
+	range 1 1000
+
+# --- Fix B2 ---
+
+config APP_LOCK_TIMEOUT_MS
+	int "Fix B2: how long the display waits for FS before it gives up (ms)"
+	default 10
+
+config APP_BACKOFF_MS
+	int "Fix B2: how long the display waits before it retries the frame (ms)"
+	default 3
+
+# --- Detection and recovery ---
+
+config APP_WDT_TIMEOUT_MS
+	int "Task watchdog: a task that does not finish a cycle for this long is reported (ms)"
+	default 1000
+	range 100 100000
+
+config APP_WDT_REBOOT
+	bool "Experiment A4: reboot when the task watchdog fires"
+	select REBOOT
+
+source "Kconfig.zephyr"
