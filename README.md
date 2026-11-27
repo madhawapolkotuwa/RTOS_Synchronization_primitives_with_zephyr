@@ -92,18 +92,17 @@ RTOS_Synchronization_primitives/
 ├── 02_counting_semaphores/        tutorial 02 (written: event counting, buffer pool)
 ├── 03_mutexes/                    tutorial 03 (written: shared bus, ownership)
 ├── 04_event_groups/               tutorial 04 (written: wait-all gate, wait-any dispatcher)
-│                                  tutorials 05–08 below: planned
-├── 05_task_notifications/
-├── 06_message_queues/
-├── 07_deadlock/
-└── 08_priority_inversion/
+├── 05_task_notifications/         tutorial 05 (written: one-to-one signals, four mechanisms compared)
+├── 06_message_queues/             tutorial 06 (written: queue sizing by copy, buffer ownership by reference)
+├── 07_deadlock/                   tutorial 07 (written: FS/SPI lock-order deadlock, diagnosis, three fixes)
+└── 08_priority_inversion/         tutorial 08 (written: H/M/L with k_sem, k_mutex inheritance, ceiling)
 ```
 
 The folder name `resources` is spelled this way on purpose, to match the project specification. Keep it that way, because every page links to it.
 
 ## Tutorial series
 
-The numbered folders hold the Zephyr tutorials for the STM32F769I-DISCO. Tutorials `01`–`04` are written. 01–03 build for the board with 0 warnings, and 02 and 03 were also run in QEMU; 04 has not been built yet. None has been run on the board yet. The other folders contain only a README with their planned scope.
+The numbered folders hold the Zephyr tutorials for the STM32F769I-DISCO. All eight tutorials are written. 01–03 build for the board with 0 warnings, and 02 and 03 were also run in QEMU. 04–07 build for the board with their default options; 08 has not been built yet. None has been run on the board yet, so the expected outputs in 04–08 are hand-derived predictions, marked as such in each README.
 
 | Folder | Topic | Theory | Status |
 |--------|-------|--------|--------|
@@ -111,10 +110,10 @@ The numbered folders hold the Zephyr tutorials for the STM32F769I-DISCO. Tutoria
 | `02_counting_semaphores` | Event counting and resource pools | Lesson 05 | written |
 | `03_mutexes` | Protecting a shared peripheral with `k_mutex` | Lesson 06 | written |
 | `04_event_groups` | Multi-condition waits with `k_event` | Lesson 07 | written |
-| `05_task_notifications` | One-to-one signalling patterns in Zephyr | Lesson 07 | planned |
-| `06_message_queues` | Producer/consumer with `k_msgq` | Lesson 08 | planned |
-| `07_deadlock` | Reproducing and fixing a lock-order deadlock | Lesson 10 | planned |
-| `08_priority_inversion` | Observing inversion and inheritance | Lesson 11 | planned |
+| `05_task_notifications` | One-to-one signalling patterns in Zephyr | Lesson 07 | written |
+| `06_message_queues` | Producer/consumer with `k_msgq` | Lesson 08 | written |
+| `07_deadlock` | Reproducing and fixing a lock-order deadlock | Lesson 10 | written |
+| `08_priority_inversion` | Observing inversion and inheritance | Lesson 11 | written |
 
 ## Glossary
 
