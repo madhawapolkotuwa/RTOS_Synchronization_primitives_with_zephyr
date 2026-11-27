@@ -1,0 +1,108 @@
+# Application options for 05_task_notifications.
+# Change them in prj.conf; no code edits are needed for the experiments.
+
+mainmenu "05_task_notifications"
+
+choice APP_DEMO
+	prompt "Which demo to build"
+	default APP_DEMO_DRIVER
+
+config APP_DEMO_DRIVER
+	bool "Part A: a driver thread waits for its own completion ISR"
+
+config APP_DEMO_BENCH
+	bool "Part B: one ISR signals four receivers, one per mechanism"
+	select EVENTS
+	select POLL
+
+endchoice
+
+config APP_REPORT_PERIOD_MS
+	int "Period of the statistics report printed by main (ms)"
+	default 2000
+
+config APP_DEBOUNCE_MS
+	int "Ignore button edges closer than this to the last accepted one (ms, 0 = off)"
+	default 50
+
+# --- Part A: used only when APP_DEMO_DRIVER is selected ---
+
+choice APP_NOTIFY
+	prompt "Part A: how the completion ISR signals the driver thread"
+	default APP_NOTIFY_SEM
+
+config APP_NOTIFY_SEM
+	bool "A binary k_sem that only the driver takes"
+
+config APP_NOTIFY_EVENT
+	bool "A k_event that only the driver waits on (DONE and ERROR bits)"
+	select EVENTS
+
+config APP_NOTIFY_POLL_SIGNAL
+	bool "A k_poll_signal raised with the status as its result, k_poll() to wait"
+	select POLL
+
+config APP_NOTIFY_WAKEUP
+	bool "k_wakeup() of the driver thread, which waits in k_sleep()"
+
+endchoice
+
+config APP_TRANSFER_PERIOD_MS
+	int "A new transfer starts every ... ms"
+	default 100
+	range 10 10000
+
+config APP_DMA_TIME_MS
+	int "Time from the start of a transfer to its completion interrupt (ms)"
+	default 5
+	range 1 10000
+	help
+	  Keep it below APP_TRANSFER_PERIOD_MS, so that one transfer has
+	  completed before the next one starts.
+
+config APP_DMA_TIMEOUT_MS
+	int "How long the driver waits for the completion (ms)"
+	default 20
+	range 1 10000
+
+config APP_SETUP_US
+	int "Busy work the driver does after starting a transfer, before it waits (us)"
+	default 0
+	range 0 50000
+	help
+	  Experiment A2. If this is longer than the DMA time, the completion
+	  arrives before the driver waits for it.
+
+config APP_ERROR_EVERY
+	int "Every Nth transfer completes with an error (0 = never)"
+	default 10
+
+config APP_RESET_BEFORE_START
+	bool "Discard a leftover signal before starting each transfer"
+	default y
+	help
+	  Experiment A4 turns this off. A completion that arrives after the
+	  driver gave up on it is then taken for the next transfer's one.
+
+# --- Part B: used only when APP_DEMO_BENCH is selected ---
+
+config APP_BENCH_PERIOD_MS
+	int "A round of signals starts every ... ms"
+	default 500
+	range 100 10000
+
+config APP_BENCH_BURST
+	int "Signals sent back to back at the start of each round"
+	default 2
+	range 1 10
+
+config APP_BENCH_LATE_MS
+	int "One more signal this long after the burst (ms, 0 = none)"
+	default 10
+
+config APP_BENCH_HANDLE_MS
+	int "Time each receiver spends on one wake-up (ms)"
+	default 50
+	range 1 1000
+
+source "Kconfig.zephyr"
