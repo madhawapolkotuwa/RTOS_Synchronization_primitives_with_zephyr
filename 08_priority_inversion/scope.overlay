@@ -1,0 +1,18 @@
+/*
+ * Optional: three trace pins on the Arduino header, for a logic analyser
+ * or an oscilloscope. Build with -DEXTRA_DTC_OVERLAY_FILE=scope.overlay
+ *
+ *   D2  high while H waits for the lock
+ *   D3  high while L holds the lock
+ *   D4  high from M's release until M is done
+ */
+
+#include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
+
+/ {
+	zephyr,user {
+		trace-gpios = <&arduino_header ARDUINO_HEADER_R3_D2 GPIO_ACTIVE_HIGH>,
+			      <&arduino_header ARDUINO_HEADER_R3_D3 GPIO_ACTIVE_HIGH>,
+			      <&arduino_header ARDUINO_HEADER_R3_D4 GPIO_ACTIVE_HIGH>;
+	};
+};

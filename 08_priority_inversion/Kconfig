@@ -1,0 +1,83 @@
+# Application options for 08_priority_inversion.
+# Change them in prj.conf; no code edits are needed for the experiments.
+
+mainmenu "08_priority_inversion"
+
+choice APP_LOCK
+	prompt "What protects the resource that L and H share"
+	default APP_LOCK_SEM
+
+config APP_LOCK_SEM
+	bool "A binary k_sem: no owner, no inheritance (unbounded inversion)"
+
+config APP_LOCK_MUTEX
+	bool "A k_mutex: priority inheritance (bounded inversion)"
+
+config APP_LOCK_CEILING
+	bool "A k_mutex plus an immediate priority ceiling done by hand"
+
+endchoice
+
+config APP_REPORT_PERIOD_MS
+	int "The scenario repeats, and main prints its trace, every ... ms"
+	default 3000
+	range 1000 60000
+
+config APP_DEBOUNCE_MS
+	int "Ignore button edges closer than this to the last accepted one (ms, 0 = off)"
+	default 50
+
+config APP_UNIT_MS
+	int "Length of one tick of Lesson 11's scenario (ms)"
+	default 100
+	range 10 1000
+	help
+	  The scenario is written in Lesson 11's ticks. 100 ms makes every
+	  phase long enough to see on the LEDs.
+
+# --- The scenario, in units (Lesson 11, worked scenario) ---
+
+config APP_L_BEFORE
+	int "L: work before the lock (units)"
+	default 1
+
+config APP_L_INSIDE
+	int "L: work inside the lock (units)"
+	default 4
+	range 1 100
+
+config APP_L_AFTER
+	int "L: work after the lock (units)"
+	default 1
+
+config APP_H_RELEASE
+	int "H is released at (units)"
+	default 2
+
+config APP_H_BEFORE
+	int "H: work before the lock (units)"
+	default 1
+
+config APP_H_INSIDE
+	int "H: work inside the lock (units)"
+	default 2
+	range 1 100
+
+config APP_H_AFTER
+	int "H: work after the lock (units)"
+	default 1
+
+config APP_M_RELEASE
+	int "M is released at (units)"
+	default 3
+
+config APP_M_WORK
+	int "M: work, never touching the lock (units)"
+	default 6
+	range 1 100
+
+config APP_BUTTON_EXTRA
+	int "The button gives M this much more work in the next cycle (units)"
+	default 5
+
+source "Kconfig.zephyr"
