@@ -1,0 +1,104 @@
+# Application options for 06_message_queues.
+# Change them in prj.conf; no code edits are needed for the experiments.
+
+mainmenu "06_message_queues"
+
+choice APP_DEMO
+	prompt "Which demo to build"
+	default APP_DEMO_SENSOR
+
+config APP_DEMO_SENSOR
+	bool "Part A: sensor samples by copy through a k_msgq"
+
+config APP_DEMO_PACKETS
+	bool "Part B: packets by reference through a k_fifo, from a k_mem_slab pool"
+
+endchoice
+
+config APP_REPORT_PERIOD_MS
+	int "Period of the statistics report printed by main (ms)"
+	default 2000
+
+config APP_DEBOUNCE_MS
+	int "Ignore button edges closer than this to the last accepted one (ms, 0 = off)"
+	default 50
+
+# --- Part A: used only when APP_DEMO_SENSOR is selected ---
+
+config APP_SAMPLE_PERIOD_US
+	int "The sensor interrupt delivers one sample every ... us"
+	default 1000
+	range 100 100000
+
+config APP_QUEUE_DEPTH
+	int "Depth of the sample queue (messages)"
+	default 16
+	range 1 1024
+
+config APP_PROCESS_US
+	int "CPU time the processing thread spends on one sample (us)"
+	default 300
+	range 1 100000
+
+config APP_BLOCK_PERIOD_MS
+	int "Higher-priority work starts every ... ms"
+	default 100
+	range 10 10000
+
+config APP_BLOCK_MS
+	int "How long that work keeps the CPU each time (ms, 0 = none)"
+	default 9
+	help
+	  The worst-case time the processing thread cannot run: Lesson 08's
+	  "5 ms radio burst plus 4 ms control update".
+
+config APP_BUTTON_BLOCK_MS
+	int "The button makes the next block of higher-priority work this long (ms)"
+	default 30
+
+choice APP_FULL_POLICY
+	prompt "What the sensor ISR does when the queue is full"
+	default APP_POLICY_DROP_NEWEST
+
+config APP_POLICY_DROP_NEWEST
+	bool "Drop the new sample (count it)"
+
+config APP_POLICY_DROP_OLDEST
+	bool "Drop the oldest queued sample, then queue the new one"
+
+endchoice
+
+config APP_ISR_PUT_WAIT
+	bool "Experiment A4: the ISR puts with a 1 ms timeout instead of K_NO_WAIT (wrong)"
+
+# --- Part B: used only when APP_DEMO_PACKETS is selected ---
+
+config APP_PACKET_PERIOD_MS
+	int "The receive interrupt delivers one packet every ... ms"
+	default 10
+	range 1 10000
+
+config APP_POOL_BLOCKS
+	int "Number of packet buffers in the k_mem_slab pool"
+	default 8
+	range 1 256
+
+config APP_HANDLE_MS
+	int "Time the consumer spends on one packet (ms, sleeping)"
+	default 4
+	range 1 10000
+
+config APP_STALL_MS
+	int "The button makes the consumer spend this long on the next packet (ms)"
+	default 50
+
+config APP_FORGET_FREE
+	bool "Experiment B2: the consumer never returns the buffers to the pool (wrong)"
+
+config APP_TOUCH_AFTER_SEND
+	bool "Experiment B3: the ISR writes into a packet 2 ms after sending it (wrong)"
+
+config APP_FIFO_NO_RESERVED
+	bool "Experiment B4: the packet struct has no reserved first word for k_fifo (wrong)"
+
+source "Kconfig.zephyr"
